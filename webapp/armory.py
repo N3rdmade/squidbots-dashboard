@@ -20,7 +20,7 @@ Where each part comes from:
   achievements  characters.character_achievement, named from Achievement.dbc.
 
 The database is read with the dashboard's own mysql client (squidbots.py's mysql()). What a visitor
-types never goes into the SQL text as such: a name must be letters only, and it is sent as a hex
+types never goes into the SQL text as such: a name must be letters (one space at most), and it is sent as a hex
 literal (X'...'), which no input can break out of. Numbers are formatted as integers.
 
 Without the server's DBC files the sheet still opens: names fall back to numbers ("Achievement #6"),
@@ -37,7 +37,8 @@ RACES = {1: "Human", 2: "Orc", 3: "Dwarf", 4: "Night Elf", 5: "Undead", 6: "Taur
          8: "Troll", 10: "Blood Elf", 11: "Draenei"}
 ALLIANCE = {1, 3, 4, 7, 11}
 BOT_ACCOUNTS = "RNDBOT%"          # mod-playerbots' random bots all live on RNDBOT<n> accounts
-NAME_RE = re.compile(r"^[^\W\d_]{2,12}$")
+# Letters, and one space between two words: CoA Bots gives its bots a surname ("Gangarna Bot", CoaBotSurname).
+NAME_RE = re.compile(r"^[^\W\d_]{2,20}(?: [^\W\d_]{1,20})?$")
 
 SLOTS = ["Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands",
          "Finger", "Finger", "Trinket", "Trinket", "Back", "Main hand", "Off hand", "Ranged", "Tabard"]
@@ -69,6 +70,11 @@ ITEM_COLUMNS = ("it.name, it.Quality, it.ItemLevel, it.RequiredLevel, it.Invento
                 + ", ".join("it.stat_type%d, it.stat_value%d" % (i, i) for i in range(1, 11)) + ", it.displayid")
 CHARACTER_COLUMNS = ("c.name, c.race, c.class, c.gender, c.level, c.zone, "
                      "TRIM(IFNULL(s.data, '0')), g.name, c.online, c.totaltime, a.username LIKE ")
+
+
+def game_case(text):
+    """A name written the way the game stores it, "Gangarna Bot": characters.name compares case and all."""
+    return " ".join(word[:1].upper() + word[1:].lower() for word in (text or "").split(" ") if word)
 
 
 class NotFound(Exception):
@@ -180,7 +186,7 @@ class Armory:
 
     def search(self, text):
         """Characters whose name starts with `text`, the exact name first."""
-        text = (text or "").strip()
+        text = game_case(text)
         if not NAME_RE.match(text):
             raise BadRequest("Type at least two letters of a character name.")
         rows = self.rows("SELECT " + CHARACTER_COLUMNS + "%s " + self._joins()
@@ -189,9 +195,9 @@ class Armory:
         return {"characters": [self._character(row) for row in rows]}
 
     def sheet(self, name):
-        name = (name or "").strip()
+        name = game_case(name)
         if not NAME_RE.match(name):
-            raise BadRequest("A character name is letters only.")
+            raise BadRequest("A character name is letters, with one space at most.")
         found = self.rows("SELECT c.guid, " + CHARACTER_COLUMNS + "%s " + self._joins() + "WHERE c.name = %s",
                           (BOT_ACCOUNTS, name))
         if not found:
@@ -271,7 +277,7 @@ class Armory:
             skill = _int(skill)
             if with_skill_names:
                 category, skill_name = dbc.get("SkillLine", skill, 1), dbc.text("SkillLine", skill, 3)
-                if category not in (9, 11) or skill_name.startswith("Racial"):
+                if category not in (9, 11) or "Racial" in skill_name:
                     continue
                 profession = category == 11
             elif skill in SKILLS:

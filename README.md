@@ -156,7 +156,7 @@ as `#armory/Name` open a sheet directly. It is on the dashboard's own page, so a
 Manager's "Dashboard" tab (which shows that page); the public copy and the LAN page leave it out.
 
 It reads the same databases with the same mysql client as the other pages, read-only; a typed name is
-letters only and is sent as a hex literal, never pasted into the query. Names of enchantments, gems,
+letters (one space at most) and is sent as a hex literal, never pasted into the query. Names of enchantments, gems,
 suffixes, professions and achievements come from the server's `data/dbc` folder (`dbcDir`, found on
 its own in a repack); without it, the sheet shows numbers ("Achievement #6") and says so.
 

@@ -1245,8 +1245,15 @@ def start_art(client):
 def _armory_names():
     try:
         STATS.load_names()
-    except Exception:  # noqa: BLE001  database down: names fall back to numbers, the sheet still answers
-        pass
+    except Exception:  # noqa: BLE001  database down, or no coa-level-builds.json: what can be read still is
+        try:
+            if not STATS.classes:
+                for cls, name in mysql("SELECT class, client_name FROM %s.ascension_custom_class" % DB["world"]):
+                    STATS.classes[int(cls)] = name
+            if STATS.zones is None:
+                STATS.zones = zone_names()
+        except Exception:  # noqa: BLE001  names fall back to numbers, the sheet still answers
+            pass
     return STATS.classes, STATS.specs, STATS.zones or {}
 
 

@@ -13,5 +13,5 @@
 - Shown in the CoA Server Manager's Dashboard tab too (it displays the dashboard's own page).
 - Works without extras: without the server's DBC files (`dbcDir`) names fall back to numbers, without a
   client items keep their coloured frames, and with the database down the page says so.
-- Read-only, through the dashboard's own mysql client; typed names are letters only, sent as hex
+- Read-only, through the dashboard's own mysql client; typed names are letters (one space at most), sent as hex
   literals. The public copy and the LAN page leave the armory out.

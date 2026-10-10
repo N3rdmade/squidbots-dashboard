@@ -24,7 +24,7 @@ const ARMORY_WORDS = {
     noIcons: "No game client found (gameClient in dashboard.json) and web icons are off: items show their quality frame instead of an icon.",
     howTitle: "How it works",
     how: {
-      search: "<p>A search on <code>characters.name</code> starting with what you type: letters only, sent to the "
+      search: "<p>A search on <code>characters.name</code> starting with what you type: letters (one space at most, as in a bot's surname), sent to the "
         + "database as a hex literal, so nothing typed here can change the query. Bots are the characters of the "
         + "<code>RNDBOT…</code> accounts (mod-playerbots); a bot shows its zone, a player does not.</p>",
       sheet: "<p>Gear: <code>character_inventory</code> (bag 0, slots 0-18) → <code>item_instance</code> (enchantments, "
