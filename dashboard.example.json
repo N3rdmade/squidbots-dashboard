@@ -19,6 +19,8 @@
   "incidentsLog": "C:\\my-server\\watch.txt",
   "_comment_client": "Optional: gameClient, a game client folder (with Data\\common.MPQ) for the map art and the armory's item icons; one beside the repack is found on its own.",
   "gameClient": "C:\\my-client",
+  "_comment_web_icons": "The armory loads the item icons it cannot take from a local client from wow.zamimg.com, in the browser. false: never ask an outside site; those items keep their quality frame.",
+  "webIcons": true,
 
   "_comment_settings": "The Settings page edits the module .conf files in this folder. By default it looks in the repack's CoA-Bots\\Core\\configs\\modules, then Core\\configs\\modules.",
   "configDir": "C:\\my-server\\server\\configs\\modules",

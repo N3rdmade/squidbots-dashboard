@@ -25,7 +25,8 @@ literal (X'...'), which no input can break out of. Numbers are formatted as inte
 
 Without the server's DBC files the sheet still opens: names fall back to numbers ("Achievement #6"),
 the main professions keep their names from the table below, and the page says names are missing.
-Without a game client, items keep their quality-coloured frames instead of icons (icons.py).
+Icons (icons.py): the name from world.itemdisplayinfo_dbc or ItemDisplayInfo.dbc, the picture from a local
+client, else from wow.zamimg.com in the browser ("webIcons": false turns that off), else the quality frame.
 """
 import re
 
@@ -118,21 +119,46 @@ def _enchant_ids(text):
 
 
 class Armory:
-    def __init__(self, query, databases, names, dbc_dir, icons_dir, client_dir):
+    def __init__(self, query, databases, names, dbc_dir, icons_dir, client_dir, web_icons=True, search_client=True):
         """`query(sql)` returns rows of strings (squidbots.py's mysql()). `names()` returns
         (classes, specs, zones): the dashboard's own lookup tables."""
         self.query, self.names = query, names
         self.chars, self.auth, self.world = databases["characters"], databases["auth"], databases["world"]
         self.dbc = Tables(dbc_dir)
-        self.icons = Icons(icons_dir, client_dir, self.dbc)
+        self.icons = Icons(icons_dir, client_dir, self.dbc, web=web_icons, search=search_client)
 
     def rows(self, sql, args=()):
         return self.query(build(sql, args))
 
     def status(self):
-        """What the page can show besides the database: names from the DBC files, icons from a client."""
+        """What the page can show besides the database: names from the DBC files, where icons come from."""
         return {"names": self.dbc.has("SkillLine") and self.dbc.has("Achievement"),
-                "icons": self.icons.available}
+                "icons": self._icon_sources()}
+
+    def _icon_sources(self):
+        return {"local": self.icons.local, "web": self.icons.web}
+
+    def _icon_names(self, display_ids):
+        """{display id: icon name}: world.itemdisplayinfo_dbc first (CoA's custom looks are there), then
+        ItemDisplayInfo.dbc for the rest. A server without the table just uses the file."""
+        names = {}
+        ids = sorted({i for i in display_ids if i > 0})
+        if ids:
+            try:
+                for display, icon in self.query("SELECT ID, InventoryIcon_1 FROM {w}.itemdisplayinfo_dbc WHERE ID IN ({ids})"
+                                                .format(w=self.world, ids=", ".join(str(int(i)) for i in ids))):
+                    icon = (_null(icon) or "").strip().lower()
+                    if icon:
+                        names[_int(display)] = icon
+            except Exception:  # noqa: BLE001  no such table on this server
+                pass
+        self.icons.remember(names.values())
+        for display in ids:
+            if display not in names:
+                icon = self.icons.name_for(display)
+                if icon:
+                    names[display] = icon
+        return names
 
     def _joins(self):
         return ("FROM {c}.characters c JOIN {a}.account a ON a.id = c.account "
@@ -172,17 +198,18 @@ class Armory:
             raise NotFound("No character by that name.")
         guid = _int(found[0][0])
         sheet = self._character(found[0][1:])
-        dbc, icons = self.dbc, self.icons
-        with_icons = icons.available
+        dbc = self.dbc
+        inventory = self.rows(
+            "SELECT ci.slot, ii.itemEntry, ii.enchantments, ii.randomPropertyId, " + ITEM_COLUMNS + " "
+            "FROM {c}.character_inventory ci JOIN {c}.item_instance ii ON ii.guid = ci.item "
+            "LEFT JOIN {w}.item_template it ON it.entry = ii.itemEntry "
+            "WHERE ci.guid = %s AND ci.bag = 0 AND ci.slot < 19 ORDER BY ci.slot"
+            .format(c=self.chars, w=self.world), (guid,))
+        icon_names = self._icon_names(_int(row[4 + 29]) for row in inventory)
 
         # ---- gear
         gear, levels, totals, armour = [], [], {}, 0
-        for row in self.rows(
-                "SELECT ci.slot, ii.itemEntry, ii.enchantments, ii.randomPropertyId, " + ITEM_COLUMNS + " "
-                "FROM {c}.character_inventory ci JOIN {c}.item_instance ii ON ii.guid = ci.item "
-                "LEFT JOIN {w}.item_template it ON it.entry = ii.itemEntry "
-                "WHERE ci.guid = %s AND ci.bag = 0 AND ci.slot < 19 ORDER BY ci.slot"
-                .format(c=self.chars, w=self.world), (guid,)):
+        for row in inventory:
             slot, entry, enchantments, random_id = _int(row[0]), _int(row[1]), row[2], _int(row[3])
             item = row[4:]
             item_name = _null(item[0])
@@ -206,8 +233,8 @@ class Armory:
                 "enchant": (dbc.text("SpellItemEnchantment", enchant_ids[0], 14) or "Enchantment #%d" % enchant_ids[0])
                 if enchant_ids[0] else "",
                 "gems": [dbc.text("SpellItemEnchantment", g, 14) or "Gem" for g in enchant_ids[2:5] if g],
-                # The icon's file name, from the item's look (icons.py); the page asks icons/<name>.png.
-                "icon": icons.name_for(_int(item[29])) if with_icons else "",
+                # The icon's file name for the item's look; the page asks icons/<name>.png, then the web.
+                "icon": icon_names.get(_int(item[29]), ""),
             }
             if dmg_max:
                 piece["damage"] = [dmg_min, dmg_max]
@@ -268,5 +295,5 @@ class Armory:
                         "at": _int(d)} for a, d in earned[:8]],
         }
         sheet["names"] = with_skill_names and with_achievements
-        sheet["icons"] = with_icons
+        sheet["icons"] = self._icon_sources()
         return sheet

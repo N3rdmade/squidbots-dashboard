@@ -1250,11 +1250,13 @@ def _armory_names():
     return STATS.classes, STATS.specs, STATS.zones or {}
 
 
-# The armory (webapp/): character sheets on the dashboard itself, never in the public copy. It reads the
-# same databases with the same mysql client; the DBC names and the client's icons are optional extras.
+# The armory (webapp/): character sheets on the dashboard itself (and in the CoA Server Manager, which shows this
+# page), never in the public copy. It reads the same databases with the same mysql client; the DBC names and the
+# icons (local client, else wow.zamimg.com unless "webIcons" is false) are optional extras.
 try:
     from webapp.armory import Armory, BadRequest as ArmoryBadRequest, NotFound as ArmoryNotFound
-    ARMORY = Armory(mysql, DB, _armory_names, DBC_DIR, os.path.join(HERE, "icons"), guess_client())
+    ARMORY = Armory(mysql, DB, _armory_names, DBC_DIR, os.path.join(HERE, "icons"), guess_client(),
+                    web_icons=SETTINGS.get("webIcons", True) is not False)
     ARMORY_ERROR = None
 except Exception as _error:  # noqa: BLE001  the dashboard runs without its armory
     ARMORY, ARMORY_ERROR = None, "%s: %s" % (type(_error).__name__, _error)

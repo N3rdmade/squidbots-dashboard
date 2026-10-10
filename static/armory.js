@@ -1,7 +1,8 @@
 /* SquidBots armory: find a character, bot or player, and open its sheet.
  *
  * "#armory" is the search, "#armory/Name" a character's sheet. The server side is webapp/armory.py
- * (under /api/armory); item icons come from icons/<name>.png when a game client is known (webapp/icons.py).
+ * (under /api/armory). Item icons: icons/<name>.png when a game client is on this PC (webapp/icons.py), else
+ * wow.zamimg.com (unless "webIcons" is false in dashboard.json), else the quality frame.
  * Without the server's DBC files or a client the sheet still opens: numbers instead of some names,
  * quality-coloured frames instead of icons. Only on the dashboard itself: the public copy leaves it out.
  */
@@ -20,7 +21,7 @@ const ARMORY_WORDS = {
     professions: "Professions", noProfessions: "No profession yet.",
     achievements: "Achievements", earned: n => n + " earned", points: n => n + " points", noAchievements: "None yet.",
     noNames: "The server's DBC files were not found (dbcDir in dashboard.json): some names show as numbers.",
-    noIcons: "No game client found (gameClient in dashboard.json): items show their quality frame instead of an icon.",
+    noIcons: "No game client found (gameClient in dashboard.json) and web icons are off: items show their quality frame instead of an icon.",
     howTitle: "How it works",
     how: {
       search: "<p>A search on <code>characters.name</code> starting with what you type: letters only, sent to the "
@@ -33,8 +34,10 @@ const ARMORY_WORDS = {
         + "fills only with <code>PlayerSave.Stats.MinLevel</code> above 0 in worldserver.conf; otherwise the sheet "
         + "adds up the gear. Professions: <code>character_skills</code> with <code>SkillLine.dbc</code>. "
         + "Achievements: <code>character_achievement</code> with <code>Achievement.dbc</code> (names and points).</p>"
-        + "<p>Icons: <code>item_template.displayid</code> → <code>ItemDisplayInfo.dbc</code> → the icon in the game "
-        + "client's MPQ files, extracted once into <code>icons/</code> (git-ignored, never published).</p>",
+        + "<p>Icons: <code>item_template.displayid</code> → <code>world.itemdisplayinfo_dbc</code> (CoA's own looks), "
+        + "else <code>ItemDisplayInfo.dbc</code> → the icon's name. The picture comes from a game client on this PC "
+        + "(extracted once into <code>icons/</code>, never published), else from <code>wow.zamimg.com</code> "
+        + "(<code>\"webIcons\": false</code> in dashboard.json turns that off), else the quality frame.</p>",
     },
     slots: ["Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands", "Finger", "Finger",
             "Trinket", "Trinket", "Back", "Main hand", "Off hand", "Ranged", "Tabard"],
@@ -52,7 +55,7 @@ const ARMORY_WORDS = {
     professions: "Métiers", noProfessions: "Aucun métier pour l'instant.",
     achievements: "Hauts faits", earned: n => n + " obtenus", points: n => n + " points", noAchievements: "Aucun pour l'instant.",
     noNames: "Les fichiers DBC du serveur sont introuvables (dbcDir dans dashboard.json) : certains noms s'affichent en nombres.",
-    noIcons: "Aucun client de jeu trouvé (gameClient dans dashboard.json) : les objets gardent leur cadre de qualité au lieu d'une icône.",
+    noIcons: "Aucun client de jeu trouvé (gameClient dans dashboard.json) et icônes web désactivées : les objets gardent leur cadre de qualité au lieu d'une icône.",
     howTitle: "Comment ça marche",
     how: null,           // the English text: table and file names read the same
     slots: ["Tête", "Cou", "Épaules", "Chemise", "Torse", "Taille", "Jambes", "Pieds", "Poignets", "Mains", "Doigt", "Doigt",
@@ -64,6 +67,8 @@ const armoryHow = key => '<details class="how"><summary>' + esc(AW().howTitle) +
   + (AW().how || ARMORY_WORDS.en.how)[key] + "</details>";
 const armoryHost = () => document.getElementById("armory");
 const armoryName = () => hashParts().slice(1).join("/");
+const ZAMIMG = name => "https://wow.zamimg.com/images/wow/icons/large/" + encodeURIComponent(name) + ".jpg";
+const noIconSource = icons => !icons || (!icons.local && !icons.web);
 const characterLine = c => esc(c.race) + " " + esc(c.class) + (c.spec ? " · " + esc(c.spec) : "");
 
 async function armoryApi(path) {
@@ -104,7 +109,7 @@ function renderArmory() {
     if (!notes) return;
     if (status.error) { notes.innerHTML = '<p class="armory-note bad-text">' + esc(status.error) + "</p>"; return; }
     notes.innerHTML = (status.names ? "" : '<p class="armory-note">' + esc(AW().noNames) + "</p>")
-      + (status.icons ? "" : '<p class="armory-note">' + esc(AW().noIcons) + "</p>");
+      + (noIconSource(status.icons) ? '<p class="armory-note">' + esc(AW().noIcons) + "</p>" : "");
   });
 }
 
@@ -161,11 +166,13 @@ async function renderCharacter(name) {
       return '<div class="gear-slot empty ' + side + '"><span class="gear-icon"></span><span class="gear-text">'
         + '<span class="gear-name">' + esc(label) + '</span><span class="meta">' + esc(words.empty) + "</span></span></div>";
     }
-    // The item's own icon when the dashboard can take it from the game client, else the slot's initials.
-    const face = piece.icon ? '<img src="icons/' + encodeURIComponent(piece.icon) + '.png" alt="" data-initials="'
+    // The item's own icon: from the game client on this PC, else from the web, else the slot's initials.
+    const icons = data.icons || {};
+    const source = !piece.icon ? "" : icons.local ? "icons/" + encodeURIComponent(piece.icon) + ".png" : icons.web ? ZAMIMG(piece.icon) : "";
+    const face = source ? '<img src="' + esc(source) + '" alt="" data-icon-name="' + esc(piece.icon) + '" data-initials="'
       + esc(label.slice(0, 2)) + '">' : esc(label.slice(0, 2));
     return '<div class="gear-slot ' + side + '" tabindex="0" data-slot="' + slot + '"><span class="gear-icon q' + piece.quality
-      + (piece.icon ? " has-icon" : "") + '">' + face + '</span><span class="gear-text"><span class="gear-name q' + piece.quality + '">'
+      + (source ? " has-icon" : "") + '">' + face + '</span><span class="gear-text"><span class="gear-name q' + piece.quality + '">'
       + esc(piece.name) + '</span><span class="meta">' + esc(label) + " · " + piece.itemLevel + "</span></span></div>";
   };
   const stats = data.stats.values.length
@@ -181,7 +188,7 @@ async function renderCharacter(name) {
     '<li><span class="dot live"></span><span><b>' + esc(a.name) + '</b><br><span class="meta">' + esc(sheetDate(a.at))
     + "</span></span></li>").join("") + "</ul>" : '<p class="empty">' + esc(words.noAchievements) + "</p>";
   const notes = (data.names ? "" : '<p class="armory-note">' + esc(words.noNames) + "</p>")
-    + (data.icons ? "" : '<p class="armory-note">' + esc(words.noIcons) + "</p>");
+    + (noIconSource(data.icons) ? '<p class="armory-note">' + esc(words.noIcons) + "</p>" : "");
 
   host.innerHTML = '<p class="back-link"><a href="#armory">' + esc(words.backToSearch) + "</a></p>" + notes
     + '<div class="sheet-head"><span class="sheet-crest">' + esc(data.name.slice(0, 1)) + '</span><div class="sheet-who">'
@@ -211,7 +218,10 @@ async function renderCharacter(name) {
   const see = document.getElementById("seeSheetBot");
   if (see) see.addEventListener("click", () => { location.hash = "#world"; setFocus(data.name); });
   for (const img of host.querySelectorAll(".gear-icon img")) {
-    img.addEventListener("error", () => {                  // no client, or an icon it does not have
+    img.addEventListener("error", () => {
+      // Not in the local client: try the web once (if allowed); not there either (a custom CoA icon): the frame.
+      const web = ZAMIMG(img.dataset.iconName);
+      if ((data.icons || {}).web && img.getAttribute("src") !== web) { img.src = web; return; }
       img.parentNode.classList.remove("has-icon");
       img.replaceWith(document.createTextNode(img.dataset.initials));
     });
