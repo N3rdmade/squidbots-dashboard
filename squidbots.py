@@ -1242,6 +1242,43 @@ def start_art(client):
     return None
 
 
+def _armory_names():
+    try:
+        STATS.load_names()
+    except Exception:  # noqa: BLE001  database down: names fall back to numbers, the sheet still answers
+        pass
+    return STATS.classes, STATS.specs, STATS.zones or {}
+
+
+# The armory (webapp/): character sheets on the dashboard itself, never in the public copy. It reads the
+# same databases with the same mysql client; the DBC names and the client's icons are optional extras.
+try:
+    from webapp.armory import Armory, BadRequest as ArmoryBadRequest, NotFound as ArmoryNotFound
+    ARMORY = Armory(mysql, DB, _armory_names, DBC_DIR, os.path.join(HERE, "icons"), guess_client())
+    ARMORY_ERROR = None
+except Exception as _error:  # noqa: BLE001  the dashboard runs without its armory
+    ARMORY, ARMORY_ERROR = None, "%s: %s" % (type(_error).__name__, _error)
+
+
+def armory_answer(path, query):
+    """(status, payload) for /api/armory, /api/armory/status and /api/armory/character."""
+    if ARMORY is None:
+        return 503, {"error": "The armory could not start: %s" % ARMORY_ERROR}
+    name = (query.get("name") or [""])[0][:40]
+    try:
+        if path == "/api/armory/status":
+            return 200, ARMORY.status()
+        if path == "/api/armory/character":
+            return 200, ARMORY.sheet(name)
+        return 200, ARMORY.search(name)
+    except ArmoryBadRequest as error:
+        return 400, {"error": str(error)}
+    except ArmoryNotFound as error:
+        return 404, {"error": str(error)}
+    except Exception as error:  # noqa: BLE001  database down or refusing: say so, keep running
+        return 503, {"error": "The game database did not answer: %s" % str(error).splitlines()[0][:200]}
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def _send(self, body, content_type, status=200):
         self.send_response(status)
@@ -1282,6 +1319,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return False
         return True
 
+    def _icon(self, leaf):
+        """icons/<name>.png: an item icon for the armory, taken from the game client the first time."""
+        body = ARMORY.icons.png(leaf[:-4]) if ARMORY and leaf.endswith(".png") else None
+        if body is None:
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Cache-Control", "public, max-age=604800")     # an icon never changes
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
         if not self._own_host():
             return
@@ -1302,6 +1353,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             first = lambda key: (query.get(key) or [None])[0]  # noqa: E731
             self._json(chat_feed(first("limit") or 100, first("kind"), first("q"), first("bot")))
+        elif path in ("/api/armory", "/api/armory/status", "/api/armory/character"):
+            status, payload = armory_answer(path, urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query))
+            self._json(payload, status)
+        elif path.startswith("/icons/"):
+            self._icon(path[len("/icons/"):])
         elif path == "/worldmap.json":
             target = os.path.join(HERE, "worldmap.json")
             if not os.path.exists(target):

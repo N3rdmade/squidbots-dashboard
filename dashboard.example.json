@@ -17,6 +17,8 @@
   "crashesDir": "C:\\my-server\\server\\Crashes",
   "dbcDir": "C:\\my-server\\server\\data\\dbc",
   "incidentsLog": "C:\\my-server\\watch.txt",
+  "_comment_client": "Optional: gameClient, a game client folder (with Data\\common.MPQ) for the map art and the armory's item icons; one beside the repack is found on its own.",
+  "gameClient": "C:\\my-client",
 
   "_comment_settings": "The Settings page edits the module .conf files in this folder. By default it looks in the repack's CoA-Bots\\Core\\configs\\modules, then Core\\configs\\modules.",
   "configDir": "C:\\my-server\\server\\configs\\modules",

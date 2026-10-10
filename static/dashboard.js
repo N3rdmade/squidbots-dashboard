@@ -46,9 +46,9 @@ const WORDS = {
     tagline: "Conquest of Azeroth · bots, live",
     searchBot: "Search a bot", otherLang: "FR",
     navWorld: "World", navBots: "Bots", navStats: "Stats",
-    navChat: "Chat & Loot", navSettings: "Settings",
+    navChat: "Chat & Loot", navSettings: "Settings", navArmory: "Armory",
     pageTitles: { world: "World", bots: "Bots", stats: "Stats",
-      chat: "Chat & Loot", pvp: "PvP", settings: "Settings" },
+      chat: "Chat & Loot", pvp: "PvP", settings: "Settings", armory: "Armory" },
     mapTitle: "Map", focusTitle: "Watching", focusNone: "Pick a bot on the map or in the Bots list to follow it here.",
     rosterTitle: "Every bot online", rosterFilter: "Filter by name, zone or class",
     sortLevel: "Level", sortName: "Name", sortZone: "Zone",
@@ -155,9 +155,9 @@ const WORDS = {
     tagline: "Conquest of Azeroth · bots en direct",
     searchBot: "Chercher un bot", otherLang: "EN",
     navWorld: "Monde", navBots: "Bots", navStats: "Statistiques",
-    navChat: "Chat et butin", navSettings: "Réglages",
+    navChat: "Chat et butin", navSettings: "Réglages", navArmory: "Armurerie",
     pageTitles: { world: "Monde", bots: "Bots", stats: "Statistiques",
-      chat: "Chat et butin", pvp: "JcJ", settings: "Réglages" },
+      chat: "Chat et butin", pvp: "JcJ", settings: "Réglages", armory: "Armurerie" },
     mapTitle: "Carte", focusTitle: "Suivi", focusNone: "Choisissez un bot sur la carte ou dans la liste des bots pour le suivre ici.",
     rosterTitle: "Tous les bots en ligne", rosterFilter: "Filtrer par nom, zone ou classe",
     sortLevel: "Niveau", sortName: "Nom", sortZone: "Zone",
@@ -276,15 +276,21 @@ function renderFooter() {
 }
 
 /* ---------------- pages ---------------- */
-// The public copy is read-only: no settings.
-const PAGES = ["world", "bots", "stats", "chat", "pvp", "settings"]
-  .filter(page => !PUBLIC || page !== "settings");
+// The public copy is read-only: no settings, and no armory (it asks the game database, see static/armory.js).
+const PAGES = ["world", "bots", "stats", "chat", "pvp", "settings", "armory"]
+  .filter(page => !PUBLIC || (page !== "settings" && page !== "armory"));
 if (PUBLIC) {
-  for (const node of document.querySelectorAll('.nav-link[href="#settings"]')) node.remove();
+  for (const node of document.querySelectorAll('.nav-link[href="#settings"], .nav-link[href="#armory"]')) node.remove();
+}
+// "#armory/Name": the page is the part before the slash, the rest is for the page itself.
+function hashParts() {
+  let hash = location.hash.replace("#", "");
+  try { hash = decodeURIComponent(hash); } catch (error) { /* a malformed link: take it as it is */ }
+  return hash.split("/");
 }
 let PAGE = "world";
 function showPage() {
-  const wanted = location.hash.replace("#", "");
+  const wanted = hashParts()[0];
   PAGE = PAGES.includes(wanted) ? wanted : "world";
   for (const page of document.querySelectorAll(".page")) page.hidden = page.dataset.page !== PAGE;
   for (const link of document.querySelectorAll(".nav-link")) {
@@ -294,7 +300,8 @@ function showPage() {
   document.getElementById("pageTitle").textContent = W.pageTitles[PAGE];
   if (PAGE === "pvp") loadPvp();
   /* private:start */if (PAGE === "chat") { loadFeed(); renderBotLang(); renderLogSetup("logSetupChat"); }
-  if (PAGE === "pvp") { renderLogSetup("logSetupPvp"); renderArenaBots(); }/* private:end */
+  if (PAGE === "pvp") { renderLogSetup("logSetupPvp"); renderArenaBots(); }
+  if (PAGE === "armory" && typeof renderArmory === "function") renderArmory();/* private:end */
 }
 window.addEventListener("hashchange", showPage);
 

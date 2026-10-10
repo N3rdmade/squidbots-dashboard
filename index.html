@@ -22,6 +22,7 @@
   <a class="nav-link" href="#stats"><i class="ico" data-icon="stats" aria-hidden="true"></i><span data-i18n="navStats"></span></a>
   <a class="nav-link" href="#chat"><i class="ico" data-icon="chat" aria-hidden="true"></i><span data-i18n="navChat"></span></a>
   <a class="nav-link" href="#pvp"><i class="ico" data-icon="pvp" aria-hidden="true"></i><span data-i18n="navPvp"></span></a>
+  <!-- private:start --><a class="nav-link" href="#armory"><i class="ico" data-icon="armory" aria-hidden="true"></i><span data-i18n="navArmory"></span></a><!-- private:end -->
   <!-- private:start --><a class="nav-link" href="#settings"><i class="ico" data-icon="settings" aria-hidden="true"></i><span data-i18n="navSettings"></span></a><!-- private:end -->
 </nav>
 
@@ -201,6 +202,8 @@
 
   <!-- private:start -->
 
+  <main class="page" data-page="armory" hidden><div id="armory"></div></main>
+
   <main class="page" data-page="settings" hidden>
     <section class="card">
       <h2><span data-i18n="settingsTitle"></span> <span class="sub" id="settingsSub"></span></h2>
@@ -227,5 +230,6 @@
 <dialog id="sheet"><div class="sheet" id="sheetBody"></div></dialog>
 
 <script src="static/dashboard.js"></script>
+<!-- private:start --><script src="static/armory.js"></script><!-- private:end -->
 </body>
 </html>

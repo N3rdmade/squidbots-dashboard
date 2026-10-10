@@ -20,6 +20,8 @@ config-backups/
 # or published. ui/ is interface art from an earlier version, no longer used.
 maps/
 ui/
+# Item icons, taken from the client one by one as the armory shows them (webapp/icons.py).
+icons/
 
 __pycache__/
 pvp.json

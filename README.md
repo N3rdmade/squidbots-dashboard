@@ -147,6 +147,25 @@ chat language, at the end of `playerbots.conf`, when an older file lacks it. It 
 files at startup, so it is easiest to use with the server stopped. Writes are accepted from the
 machine itself only, from the dashboard's own page. The dashboard never writes to the game database.
 
+## Armory
+
+The Armory page (dashboard only, never in the public copy or the LAN page) finds any character, bot
+or player, by the start of its name and opens its sheet: the gear in the game's paper-doll order with
+quality colours, item level and a tooltip (damage, stats, enchantment, gems), the average item level,
+stats, professions and the latest achievements. Links such as `#armory/Name` open a sheet directly.
+
+It reads the same databases with the same mysql client as the other pages, read-only; a typed name is
+letters only and is sent as a hex literal, never pasted into the query. Two extras are optional:
+
+- `dbcDir`, the server's `data/dbc` folder: names of enchantments, gems, suffixes, professions and
+  achievements. Without it, the sheet shows numbers ("Achievement #6") and says so.
+- `gameClient`, a game client folder (one with `Data/common.MPQ`; one beside the repack is found on its
+  own): item icons, taken from the client one at a time the first time a sheet shows them and kept in
+  `icons/` (git-ignored, Blizzard's art, never published). Without it, items keep their coloured frames.
+
+Stats are the server's own when `PlayerSave.Stats.MinLevel` is above 0 in `worldserver.conf`;
+otherwise the sheet adds up the gear and says so. Nothing new is needed from the module.
+
 ## Map
 
 `worldmap.json` (rebuilt by `tools/gen_worldmap.py`) gives the map its zones out of the box: each
