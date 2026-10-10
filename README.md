@@ -97,11 +97,11 @@ your home network, add a second port to `dashboard.json`:
 ```
 
 Then open `http://<the server PC's address>:8089` on the other PC (for example
-`http://192.168.1.20:8089`). This port serves the **public version**, read-only: the map, bots,
+`http://<this-pc-address>:8089`). This port serves the **public version**, read-only: the map, bots,
 stats, chat counts, loot and PvP pages, without the Settings page, the real players' chat and
 whispers, paths or crash details. Settings are still changed on the server PC itself, at
 `localhost:8088`. Windows Firewall asks once whether Python may accept connections: allow it for
-private networks only. `"lanListen": "192.168.1.20"` limits the port to one network card.
+private networks only. `"lanListen": "<this-pc-address>"` limits the port to one network card.
 
 ## Logs some cards need
 
