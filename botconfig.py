@@ -438,11 +438,17 @@ def _log_line_ok(key, value):
 
 
 def worldserver_template(conf_dir):
-    """Settings/worldserver.conf.template of a server that writes worldserver.conf anew at every start
-    (the CoA Server Manager: <root>/Core/configs/modules and <root>/Settings), else None."""
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.normpath(conf_dir))))
-    path = os.path.join(root, "Settings", WORLDSERVER + ".template")
-    return path if os.path.exists(path) else None
+    """Settings/worldserver.conf.template of a server that writes worldserver.conf anew at every start,
+    else None: <root>/Core/configs/modules (the CoA Server Manager, the repack's own server) or
+    <root>/CoA-Bots/Core/configs/modules (the CoA Bots server, whose worldserver.conf is copied from the
+    repack's at every start)."""
+    folder = os.path.normpath(conf_dir)
+    for _level in range(4):
+        folder = os.path.dirname(folder)
+        path = os.path.join(folder, "Settings", WORLDSERVER + ".template")
+        if os.path.exists(path):
+            return path
+    return None
 
 
 def _log_values(path):
@@ -457,12 +463,15 @@ def _log_values(path):
 def log_setup(conf_dir):
     """{file, present, missing: [keys]} for the journal lines of worldserver.conf, or of its template
     when there is one: that is what the next start will use."""
-    path = worldserver_template(conf_dir) or worldserver_conf(conf_dir)
-    if not os.path.exists(path):
+    template, live = worldserver_template(conf_dir), worldserver_conf(conf_dir)
+    files = [path for path in (template, live) if path and os.path.exists(path)]
+    if not files:
         return {"file": WORLDSERVER, "present": False, "missing": [key for key, _ in LOG_LINES]}
-    found = _log_values(path)
-    return {"file": os.path.basename(path), "present": True,
-            "missing": [key for key, _ in LOG_LINES if not _log_line_ok(key, found.get(key))]}
+    # A line counts when either file has it: the CoA Bots launcher adds the journal lines to the copy it
+    # makes at every start, so they are in worldserver.conf and not in the template.
+    found = [_log_values(path) for path in files]
+    return {"file": os.path.basename(files[0]), "present": True,
+            "missing": [key for key, _ in LOG_LINES if not any(_log_line_ok(key, values.get(key)) for values in found)]}
 
 
 def enable_logs(conf_dir, backup_dir):
