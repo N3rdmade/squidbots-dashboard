@@ -619,8 +619,18 @@ def mysql(query):
     out = subprocess.run([exe] + login + ["-N", "-B", "-e", query], stdin=subprocess.DEVNULL,
                          capture_output=True, text=True, encoding="utf-8", timeout=30)
     if out.returncode:
-        raise RuntimeError(out.stderr.strip())
+        raise RuntimeError(mysql_error(out.stderr, out.returncode))
     return [line.split("\t") for line in out.stdout.splitlines() if line]
+
+
+def mysql_error(stderr, code):
+    """What went wrong, without mysql.exe's warning about a password on the command line, which it prints
+    first on every call and which would otherwise be all a page shows."""
+    lines = [line.strip() for line in (stderr or "").splitlines() if line.strip() and "[Warning]" not in line]
+    text = " ".join(lines)
+    if not text or "ERROR 2002" in text or "ERROR 2003" in text or "Can't connect" in text:
+        return "The database is not answering: is MySQL running? (mysql.exe exit code %d)" % code
+    return text
 
 
 def role_of(spec):
@@ -1285,7 +1295,8 @@ def armory_answer(path, query):
     except ArmoryNotFound as error:
         return 404, {"error": str(error)}
     except Exception as error:  # noqa: BLE001  database down or refusing: say so, keep running
-        return 503, {"error": "The game database did not answer: %s" % str(error).splitlines()[0][:200]}
+        text = (str(error).splitlines() or [""])[0][:200]
+        return 503, {"error": text if text.startswith("The database") else "The game database did not answer: " + text}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):

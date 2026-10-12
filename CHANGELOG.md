@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1 (for CoA Bots 2.1)
+
+- **Turn the journals on** writes the repack's `Settings\worldserver.conf.template`: the repack rebuilds both
+  `worldserver.conf` files from it at every start, and the button looked for it in the wrong folder, so
+  `Battleground.StoreStatistics.Enable` (battlegrounds on the PvP page) went back to 0 (also shipped as 2.0.1).
+- When the database is down, the Armory and the other pages say so ("The database is not answering: is MySQL
+  running?") instead of showing mysql.exe's warning about a password on the command line.
+
 ## 2.0 (for CoA Bots 2.0)
 
 - **Armory** page on the dashboard: search any character, bot or player, by the start of its name and
