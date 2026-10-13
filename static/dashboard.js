@@ -827,7 +827,7 @@ function renderPvp() {
 // One switch per format for AiPlayerbot.RandomBotAutoJoinBGRatedArena<N>Count: on keeps the count the
 // file has (1 when it was 0), off writes 0.
 const ARENA_KEYS = { "2v2": "AiPlayerbot.RandomBotAutoJoinBGRatedArena2v2Count",
-  "3v3": "AiPlayerbot.RandomBotAutoJoinBGRatedArena3v3Count", "5v5": "AiPlayerbot.RandomBotAutoJoinBGRatedArena5v5Count" };
+  "3v3": "AiPlayerbot.RandomBotAutoJoinBGRatedArena3v3Count" };
 
 async function renderArenaBots() {
   const host = document.getElementById("arenaBots");
