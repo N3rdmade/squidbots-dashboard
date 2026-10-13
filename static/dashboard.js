@@ -18,7 +18,7 @@ const WORDS = {
     pvpLoading: "Reading the battlegrounds and arenas…",
     pvpError: "The PvP figures could not be read: ",
     pvpBgTitle: "Battlegrounds", pvpBgSub: "games and wins per side",
-    pvpArenaTitle: "Arenas", pvpArenaSub: "rated fights",
+    pvpArenaTitle: "Arenas", pvpArenaSub: "rated fights, skirmishes not counted",
     pvpTeamsTitle: "Top arena teams", pvpTeamsSub: "rating now, games of the season",
     pvpMarksTitle: "High Risk and War Mode", pvpMarksSub: "characters marked now, and their games",
     pvpClassesTitle: "Classes in battlegrounds", pvpClassesSub: "killing blows per game",
@@ -127,7 +127,7 @@ const WORDS = {
     pvpLoading: "Lecture des champs de bataille et des arènes…",
     pvpError: "Les chiffres JcJ n'ont pas pu être lus : ",
     pvpBgTitle: "Champs de bataille", pvpBgSub: "parties et victoires par camp",
-    pvpArenaTitle: "Arènes", pvpArenaSub: "combats cotés",
+    pvpArenaTitle: "Arènes", pvpArenaSub: "combats cotés, escarmouches non comptées",
     pvpTeamsTitle: "Meilleures équipes d'arène", pvpTeamsSub: "cote actuelle, parties de la saison",
     pvpMarksTitle: "High Risk et War Mode", pvpMarksSub: "personnages marqués maintenant, et leurs parties",
     pvpClassesTitle: "Classes en champ de bataille", pvpClassesSub: "coups fatals par partie",
@@ -715,6 +715,8 @@ async function loadPvp() {
   renderPvp();
 }
 
+const PVP_BRACKETS = ["1v1", "2v2", "3v3"];
+
 function renderPvp() {
   const host = document.getElementById("pvp");
   if (!PVP) return;
@@ -768,7 +770,8 @@ function renderPvp() {
   const bgCard = '<section class="card"><h2>' + esc(W.pvpBgTitle) + sub(W.pvpBgSub) + "</h2>"
     + table([null, H(W.pvpGames, 1), H("Alliance · Horde"), H(W.pvpKills, 1), H(W.pvpObjectivesHead)], bgRows) + "</section>";
 
-  const arRows = ["2v2", "3v3", "5v5"].map(key => {
+  // CoA arena brackets: 1v1, 2v2, 3v3 (no 5v5; an old pvp.json "5v5" key is ignored).
+  const arRows = PVP_BRACKETS.map(key => {
     const a = ar[key] || {};
     return "<tr><td>" + key + '</td><td class="r">' + n(a.combats) + '</td><td class="r">' + secs(a.duree_moyenne)
       + '</td><td class="r">' + secs(a.duree_mediane) + '</td><td class="r">' + n(a.equipes_actives) + "</td></tr>";
@@ -789,7 +792,7 @@ function renderPvp() {
     + sub(W.pvpArenaClassesSub) + "</h2>" + classTable((ar.tous || {}).classes, false) + "</section></div>";
 
   const ranking = PVP.classement || {};
-  const teams = ["2v2", "3v3", "5v5"].map(key => {
+  const teams = PVP_BRACKETS.map(key => {
     const list = (ranking[key] || {}).tete || [];
     if (!list.length) return "";
     return '<h2 class="later">' + key + "</h2>" + table([null, H(W.pvpTeam), H(W.pvpRating, 1), H(W.pvpGames, 1), H(W.pvpWins, 1),

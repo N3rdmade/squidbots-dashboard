@@ -15,7 +15,7 @@ Ce qui sort (agrégé, AUCUN nom de personnage, de compte ni d'adresse) :
   - bg[période] : par type (warsong, arathi, alterac, et « tous ») : parties, victoires Alliance / Horde, joueurs par
     partie, objectifs par camp (Warsong : captures, drapeaux rendus ; Arathi : bases attaquées / défendues ; Alterac :
     cimetières, tours, mines), coups fatals par camp, coups fatals par classe (avec le nombre de participations) ;
-  - arenes[période] : par type (2v2, 3v3, 5v5, « tous ») : combats cotés, durée moyenne et médiane, victoires par classe,
+  - arenes[période] : par type (1v1, 2v2, 3v3, « tous » ; CoA n'a pas de 5v5) : combats cotés, durée moyenne et médiane, victoires par classe,
     et « durees », l'histogramme des durées [[secondes, combats], ...] (pvp_merge.py en refait moyenne et médiane) ;
   - classement : par type, les équipes d'arène qui ont joué, par cote (instantané d'arena_team) : cote, parties,
     victoires, composition par CLASSE, bots_only (tous les membres sur un compte de bot aléatoire : préfixe
@@ -76,7 +76,13 @@ BG_OBJECTIFS = {
     "alterac": [("tours_prises", 3), ("tours_defendues", 4), ("cimetieres_pris", 1), ("cimetieres_defendus", 2),
                 ("mines", 5)],
 }
-ARENE_TYPES = {2: "2v2", 3: "3v3", 5: "5v5"}
+# Tranches d'arène de CoA : 1v1, 2v2, 3v3 (pas de 5v5). log_arena_fights.type = type d'arène du cœur
+# (ARENA_TYPE_1v1 = 1, 2v2 = 2, 3v3 = 3). Les files solo cotées créent des équipes personnelles : 2v2 -> arena_team
+# type 2, 3v3 -> type 3, et 1v1 -> arena_team type 5 (le cœur réutilise l'emplacement 5v5) ; d'où deux tables.
+# Les escarmouches (non cotées) ne sont pas dans log_arena_fights.
+ARENE_TYPES = {1: "1v1", 2: "2v2", 3: "3v3"}
+EQUIPE_TYPES = {5: "1v1", 2: "2v2", 3: "3v3"}
+TRANCHES = ("1v1", "2v2", "3v3")
 CAMPS = ("alliance", "horde")
 FMT = "%Y-%m-%d %H:%M:%S"
 MOT = re.compile(r"[^\W\d_]+(?:['’-][^\W\d_]+)*")
@@ -486,10 +492,10 @@ def main():
         cl = entier(l[1])
         membres.setdefault(entier(l[0]), []).append((CLASS_NAMES.get(cl, "#%d" % cl) if cl else "?", l[2] == "1"))
     noms_remplaces = 0
-    for n, t in ARENE_TYPES.items():
+    for t in TRANCHES:
         liste = []
         for l in equipes:
-            if entier(l[2]) != n:
+            if EQUIPE_TYPES.get(entier(l[2])) != t:
                 continue
             eid, nom = entier(l[0]), l[1]
             ms = membres.get(eid, [])
