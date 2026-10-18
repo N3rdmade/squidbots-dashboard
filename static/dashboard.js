@@ -1685,8 +1685,13 @@ function artSkeleton(host) {
     + '<button class="btn primary" type="button" data-art-go>Extract maps</button></div>'
     + '<div class="art-progress" data-art-progress hidden><div class="bar"><i></i></div><span data-art-label></span></div>'
     + '<p class="meta" data-art-note></p>';
-  let saved = "";
-  try { saved = localStorage.getItem("squidbots-client") || ""; } catch (error) { /* ignore */ }
+  // ?client=<folder> in the address (the CoA launcher opens the page with its client folder) wins over the
+  // folder typed last time, and is remembered in its place.
+  let saved = new URLSearchParams(location.search).get("client") || "";
+  try {
+    if (saved) localStorage.setItem("squidbots-client", saved);
+    else saved = localStorage.getItem("squidbots-client") || "";
+  } catch (error) { /* ignore */ }
   host.querySelector("[data-art-client]").value = saved;
 }
 
