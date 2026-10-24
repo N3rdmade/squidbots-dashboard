@@ -13,9 +13,9 @@ import re
 
 # What the launcher's modes are (realms.cjs MODES): the id it gives a new realm, the prefix of its bot accounts.
 MODES = {
-    "coa": {"id": 1, "name": "Conquest of Azeroth", "prefix": "rndbot"},
-    "wildcard": {"id": 2, "name": "Darkmoon (Wildcard)", "prefix": "rndwc"},
-    "reborn": {"id": 3, "name": "Bronzebeard (Reborn)", "prefix": "rndwr"},
+    "coa": {"id": 1, "name": "Conquest of Azeroth", "prefix": "rndbot", "step": 0},
+    "wildcard": {"id": 2, "name": "Darkmoon (Wildcard)", "prefix": "rndwc", "step": 1},
+    "reborn": {"id": 3, "name": "Bronzebeard (Reborn)", "prefix": "rndwr", "step": 2},
 }
 # Files the dashboard wrote beside itself before it knew of realms: the CoA realm keeps them there.
 LEGACY = {"kills.json", "levels.json", "history.json", "xp-history.json", "baseline.json", "pvp.json"}
@@ -101,6 +101,16 @@ class Realm:
         return {"key": self.key, "id": self.id, "name": self.name, "mode": self.mode, "disabled": self.disabled}
 
 
+def _port(*values):
+    for value in values:
+        try:
+            if int(value or 0) > 0:
+                return int(value)
+        except (TypeError, ValueError):
+            continue
+    return 0
+
+
 def discover(root, settings, here, coa):
     """[Realm] of this server, the CoA realm first. `coa` is the CoA realm as dashboard.json describes it."""
     realms = [coa]
@@ -122,14 +132,21 @@ def discover(root, settings, here, coa):
         modules = os.path.join(configs, "modules")
         mode = MODES[key]
         prefix = conf_value(os.path.join(modules, "playerbots.conf"), "AiPlayerbot.RandomBotAccountPrefix") or mode["prefix"]
+        # The ports the realm's worldserver really uses: those of the configs the launcher wrote for it, then realm.json,
+        # then the launcher's own rule for a realm that never saved them (the CoA realm's + 100 per step).
+        conf = os.path.join(configs, "worldserver.conf")
+        repack = read_json(os.path.join(root, "Settings", "repack.json")) or {}
+        world_port = _port(conf_value(conf, "WorldServerPort"), saved.get("worldPort"),
+                           _port(repack.get("worldPort"), 8085) + 100 * mode["step"])
+        ra_port = _port(conf_value(conf, "Ra.Port"), saved.get("raPort"), _port(repack.get("raPort"), 3443) + 100 * mode["step"])
         databases = {"auth": coa.db["auth"], "world": coa.db["world"], "characters": "acore_characters_" + key,
                      "playerbots": "acore_playerbots_" + key}
         try:
             realms.append(Realm(
                 key, saved.get("id") or mode["id"], saved.get("name") or mode["name"], databases,
                 logs=os.path.join(place, "Logs"), config_dir=modules, crashes=[os.path.join(place, "Crashes")],
-                files=os.path.join(here, "data", key), prefix=prefix, world_port=saved.get("worldPort"),
-                ra_port=saved.get("raPort"), pid_file=os.path.join(place, ".state.json"),
+                files=os.path.join(here, "data", key), prefix=prefix, world_port=world_port,
+                ra_port=ra_port, pid_file=os.path.join(place, ".state.json"),
                 disabled=bool(saved.get("disabled")), here=here))
         except ValueError:
             continue

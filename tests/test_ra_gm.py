@@ -97,6 +97,24 @@ class RealmsTest(unittest.TestCase):
         self.assertTrue(wildcard.file("perf.json").startswith(os.path.join(here, "data", "wildcard")))
         self.assertEqual(coa.file("history.json"), os.path.join(here, "history.json"))
 
+    def test_ports_never_the_coa_realms(self):
+        root, here = tempfile.mkdtemp(), tempfile.mkdtemp()
+        place = os.path.join(root, "Royaumes", "reborn")
+        os.makedirs(os.path.join(place, "configs", "modules"))
+        with open(os.path.join(place, "configs", "worldserver.conf"), "w") as handle:
+            handle.write("WorldServerPort = 8312" + chr(10) + "Ra.Port = 3660" + chr(10))
+        with open(os.path.join(place, "realm.json"), "w") as handle:
+            handle.write('{"id": 3}')
+        coa = realms.Realm("coa", 1, "CoA", {"auth": "a", "characters": "c", "world": "w"}, root, root, [], here, "rndbot", here=here)
+        reborn = realms.discover(root, {}, here, coa)[1]
+        self.assertEqual((reborn.world_port, reborn.ra_port), (8312, 3660))
+        os.remove(os.path.join(place, "configs", "worldserver.conf"))
+        open(os.path.join(place, "configs", "worldserver.conf"), "w").close()
+        reborn = realms.discover(root, {}, here, coa)[1]
+        self.assertEqual((reborn.world_port, reborn.ra_port), (8285, 3643))      # the launcher's rule: CoA's + 200
+        with self.assertRaises(ra.RaError):
+            ra.command(root, 0, "server info")
+
     def test_own_settings(self):
         root = tempfile.mkdtemp()
         os.makedirs(os.path.join(root, "Royaumes", "reborn"))

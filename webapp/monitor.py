@@ -133,7 +133,9 @@ class Monitor:
         return 0
 
     def _ra_port(self, realm):
-        if realm.ra_port:
+        """The realm's console port. A launcher realm without one has none: never the CoA realm's, or a command meant
+        for it would run on the CoA world."""
+        if realm.ra_port or realm.key != "coa":
             return realm.ra_port
         if self._coa_ra is None:
             self._coa_ra = ra.account(self.root)[2]
@@ -159,12 +161,12 @@ class Monitor:
         state["bots"] = self.bots_online(realm.key) if running else None
         return state
 
+    def _claimed(self):
+        """The pids the launcher recorded for its realms: the CoA realm never takes one of them."""
+        return {realm.pid() for realm in self.realms if realm.key != "coa"} - {0}
+
     def round(self):
-        pids = set()
-        for realm in self.realms:
-            pid = realm.pid()
-            if pid:
-                pids.add(pid)
+        pids = self._claimed()
         for realm in self.realms:
             track = self.tracks[realm.key]
             before = track.state
@@ -172,16 +174,19 @@ class Monitor:
                 state = self.look(realm, pids)
             except Exception as error:  # noqa: BLE001  one realm's trouble never stops the others
                 state = {"running": False, "error": str(error), "at": round(time.time())}
+            happened = False
             if before.get("running") != state.get("running") and "at" in before:
                 track.event("start" if state.get("running") else "stop")
+                happened = True
             for stamp in self._new_crashes(realm, track):
                 track.event("crash", time.strftime("%d/%m %H:%M", time.localtime(stamp)))
+                happened = True
             with self.lock:
                 track.state = state
                 track.add({"ts": state["at"], "up": 1 if state.get("running") else 0, "ram": state.get("ramMo"),
                            "cpu": state.get("cpu"), "tick": state.get("tickMean") or state.get("tick"),
                            "players": state.get("players"), "bots": state.get("bots")})
-            track.save()
+            track.save(force=happened)     # an event is kept at once, the curves every few minutes
 
     def _new_crashes(self, realm, track):
         found = [os.path.getmtime(f) for folder in realm.crashes
@@ -217,7 +222,7 @@ class Monitor:
         if not self.every or "at" not in track.state or time.time() - track.state["at"] > max(180, 3 * self.every):
             realm = next(r for r in self.realms if r.key == key)
             with self.lock:
-                track.state = self.look(realm, with_ra=False)
+                track.state = self.look(realm, self._claimed(), with_ra=False)
         return track.state
 
     def series(self, key, span="day"):

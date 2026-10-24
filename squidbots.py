@@ -545,16 +545,15 @@ def public_live_body(ctx):
 def live_publish_loop():
     last_error = None
     while True:
-        try:
-            for ctx in CONTEXTS:
-                if ctx.realm.disabled:
-                    continue
+        errors = []
+        for ctx in public_contexts():
+            try:
                 write_atomic(os.path.join(PUBLISH_DIR, ctx.public_name("live.json")), public_live_body(ctx))
-            last_error = None
-        except Exception as error:  # the NAS may be asleep: said once, tried again
-            if str(error) != last_error:
-                print("Public live view failed:", error, flush=True)
-                last_error = str(error)
+            except Exception as error:  # the NAS may be asleep, a realm's database missing: the others go on
+                errors.append("%s: %s" % (ctx.realm.key, error))
+        if errors and "; ".join(errors) != last_error:
+            print("Public live view failed:", "; ".join(errors), flush=True)
+        last_error = "; ".join(errors) or None
         time.sleep(LIVE_PUBLISH_EVERY)
 
 
@@ -1149,12 +1148,15 @@ def realms_overview():
     return {"realms": out, "monitorEvery": MONITOR.every, "gm": GM_ENABLED}
 
 
+def public_contexts():
+    """The realms the public copy and the local network page show: turned on, and listed in publicRealms."""
+    return [ctx for ctx in CONTEXTS if not ctx.realm.disabled and ctx.realm.key in PUBLIC_REALMS]
+
+
 def public_realms():
     """realms.json of the public copy: names and whether each is up, nothing else."""
     out = []
-    for ctx in CONTEXTS:
-        if ctx.realm.disabled:
-            continue
+    for ctx in public_contexts():
         state = MONITOR.state(ctx.realm.key)
         out.append(dict(ctx.realm.public(), running=bool(state.get("running")), bots=state.get("bots"),
                         players=state.get("players")))
@@ -1292,15 +1294,16 @@ def publish_loop():
             publish_maps()
             write_atomic(os.path.join(PUBLISH_DIR, "realms.json"),
                          json.dumps(public_realms(), ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-            for ctx in CONTEXTS:
-                if ctx.realm.disabled or (ctx.realm.key not in PUBLIC_REALMS):
-                    continue
-                write_atomic(os.path.join(PUBLISH_DIR, ctx.public_name("stats.json")),
-                             json.dumps(public_copy(ctx.stats.get()), ensure_ascii=False,
-                                        separators=(",", ":")).encode("utf-8"))
-                pvp = ctx.pvp.get()
-                if b'"error"' not in pvp[:20]:
-                    write_atomic(os.path.join(PUBLISH_DIR, ctx.public_name("pvp.json")), pvp)
+            for ctx in public_contexts():
+                try:
+                    write_atomic(os.path.join(PUBLISH_DIR, ctx.public_name("stats.json")),
+                                 json.dumps(public_copy(ctx.stats.get()), ensure_ascii=False,
+                                            separators=(",", ":")).encode("utf-8"))
+                    pvp = ctx.pvp.get()
+                    if b'"error"' not in pvp[:20]:
+                        write_atomic(os.path.join(PUBLISH_DIR, ctx.public_name("pvp.json")), pvp)
+                except Exception as error:  # one realm's trouble never keeps the others from publishing
+                    print("Public copy of %s failed:" % ctx.realm.key, error, flush=True)
         except Exception as error:  # the NAS may be asleep or unreachable: retry next minute
             print("Public copy failed:", error, flush=True)
         time.sleep(PUBLISH_EVERY)
@@ -1604,7 +1607,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/config":
             self._json(config_payload(ctx))
         elif path == "/api/logs":
-            self._json(dict(botconfig.log_setup(ctx.config_dir), serverRunning=server_state(ctx).get("running", False)))
+            # A launcher realm takes its journals from the CoA realm's worldserver.conf at every start.
+            self._json(dict(botconfig.log_setup(CONTEXTS[0].config_dir), serverRunning=server_state(ctx).get("running", False)))
         elif path == "/api/pvp":
             self._send(ctx.pvp.get(), "application/json; charset=utf-8")
         elif path == "/api/art":
@@ -1707,6 +1711,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/logs":
             if not self._local_only():
                 return
+            # A launcher realm's worldserver.conf is written again at every start from the CoA realm's: the journals
+            # are turned on there, and every realm has them from its next start.
+            ctx = CONTEXTS[0]
             try:
                 changed, backup = botconfig.enable_logs(ctx.config_dir, CONFIG_BACKUPS)
             except Exception as error:           # noqa: BLE001
@@ -1774,7 +1781,7 @@ class LanHandler(Handler):
         leaf = path.lstrip("/") or "index.html"
         realm = re.match(r"^(stats|live|pvp)(?:-([a-z]{3,12}))?\.json$", leaf)
         ctx = BY_KEY.get(realm.group(2) or "coa") if realm else None
-        if realm and (ctx is None or ctx.realm.key not in PUBLIC_REALMS):
+        if realm and (ctx is None or ctx not in public_contexts()):
             self.send_error(404)
             return
         try:

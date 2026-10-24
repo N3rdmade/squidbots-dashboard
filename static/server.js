@@ -99,7 +99,7 @@ const SERVER_WORDS = {
   },
 };
 const SW = () => SERVER_WORDS[lang] || SERVER_WORDS.en;
-const gb = mo => one(mo / 1024) + (lang === "fr" ? " Go" : " GB");
+const gb = gigabytes;
 const ago = ts => {
   const minutes = Math.max(0, Math.round((Date.now() / 1000 - ts) / 60));
   if (minutes < 60) return minutes + " min";

@@ -599,11 +599,11 @@ a.char-card.link:hover { border-color: var(--gold); background: rgba(214, 176, 9
 }
 
 /* ---------- realms (2.8): one accent per realm, the launcher's own colours ---------- */
-:root, .mode-coa, body[data-realm="coa"] { --realm: #d9b25b; --realm-glow: rgba(217, 178, 91, .28); }
-.mode-wildcard, body[data-realm="wildcard"] { --realm: #c27bff; --realm-glow: rgba(194, 123, 255, .30); }
-.mode-reborn, body[data-realm="reborn"] { --realm: #ff8a3d; --realm-glow: rgba(255, 138, 61, .30); }
-body[data-realm="wildcard"] { --page-glow: rgba(194, 123, 255, .10); }
-body[data-realm="reborn"] { --page-glow: rgba(255, 138, 61, .10); }
+:root, .mode-coa, body[data-shown-realm="coa"] { --realm: #d9b25b; --realm-glow: rgba(217, 178, 91, .28); }
+.mode-wildcard, body[data-shown-realm="wildcard"] { --realm: #c27bff; --realm-glow: rgba(194, 123, 255, .30); }
+.mode-reborn, body[data-shown-realm="reborn"] { --realm: #ff8a3d; --realm-glow: rgba(255, 138, 61, .30); }
+body[data-shown-realm="wildcard"] { --page-glow: rgba(194, 123, 255, .10); }
+body[data-shown-realm="reborn"] { --page-glow: rgba(255, 138, 61, .10); }
 .ico[data-icon="realms"]::before { content: "🏰"; }
 .ico[data-icon="server"]::before { content: "📈"; }
 .ico[data-icon="market"]::before { content: "💰"; }

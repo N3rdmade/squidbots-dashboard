@@ -24,7 +24,7 @@ const realmFile = name => (!PUBLIC || REALM === "coa" ? name : name.replace(/\.j
   };
 }
 /* private:end */
-document.body.dataset.realm = REALM;
+document.body.dataset.shownRealm = REALM;
 
 /* ---------------- words ---------------- */
 const WORDS = {
@@ -426,6 +426,7 @@ function sparkline(values, color) {
     '<path d="' + path + " L" + width + " " + height + " L0 " + height + ' Z" fill="' + color + '" opacity=".12"/>' +
     '<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>';
 }
+const gigabytes = mo => one(mo / 1024) + (lang === "fr" ? " Go" : " GB");
 const tickClass = tick => (tick == null ? "" : tick < 100 ? "good" : tick < 200 ? "warn" : "bad");
 
 function renderRealms() {
@@ -444,7 +445,7 @@ function renderRealms() {
     if (!PUBLIC) {
       tiles.push([W.realmLevel, counts.avgLevel ? one(counts.avgLevel) : "–", counts.maxLevel ? "max " + counts.maxLevel : ""],
         [W.realmTick, tick == null ? "–" : num(tick) + " ms", "", tickClass(tick)],
-        [W.realmRam, live.ramMo == null ? "–" : one(live.ramMo / 1024) + " Go".replace("Go", lang === "fr" ? "Go" : "GB"), ""],
+        [W.realmRam, live.ramMo == null ? "–" : gigabytes(live.ramMo), ""],
         [W.realmCrashes, num(realm.crashes || 0), "", realm.crashes ? "bad" : ""]);
     }
     const spark = PUBLIC ? "" : sparkline((realm.spark || []).map(p => p.bots), "var(--realm)");
@@ -461,7 +462,7 @@ function renderRealms() {
   }).join("");
   host.innerHTML = '<div class="figures realm-totals">' +
     [[W.realmsTotal, total.up + " / " + REALMS.length, ""], [W.realmBots, num(total.bots), ""], [W.realmPlayers, num(total.players), ""]]
-      .concat(PUBLIC ? [] : [[W.realmRam, one(total.ram / 1024) + (lang === "fr" ? " Go" : " GB"), ""]])
+      .concat(PUBLIC ? [] : [[W.realmRam, total.ram ? gigabytes(total.ram) : "–", ""]])
       .map(f => '<div class="figure"><div class="label">' + esc(f[0]) + '</div><div class="value num">' + esc(f[1]) + "</div></div>").join("") +
     '</div><div class="realm-grid">' + cards + "</div>";
 }
@@ -876,7 +877,7 @@ async function loadPvp() {
   if (PVP && !PVP.error && Date.now() - PVP_AT < 60000) { renderPvp(); return; }
   if (!PVP) host.innerHTML = '<p class="empty">' + esc(W.pvpLoading) + "</p>";
   try {
-    PVP = await (await fetch(PVP_API, { cache: "no-store" })).json();
+    PVP = await (await fetch(realmFile(PVP_API), { cache: "no-store" })).json();
     PVP_AT = Date.now();
   } catch (error) { PVP = { error: String(error) }; }
   renderPvp();

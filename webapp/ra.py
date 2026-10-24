@@ -37,6 +37,8 @@ def clean(text):
 
 def command(root, port, line, timeout=10.0):
     """Run `line` on the console at `port`; its answer as text. RaError when the world does not answer."""
+    if not port:
+        raise RaError("This realm's console port is unknown: start it once from the launcher.")
     user, password, _ = account(root)
     line = clean(line)
     try:
