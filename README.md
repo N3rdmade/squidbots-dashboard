@@ -48,8 +48,9 @@ The live part — task, health, power, position to the second — comes from `bo
 mod-playerbots writes when `AiPlayerbot.CoaStatusFile` is set (see [Live status](#live-status)).
 Without it the card falls back to the last character save: alive or dead, online or not.
 
-English and French. Dark theme. The Cinzel font is bundled under the SIL Open Font License
-(`static/fonts/OFL.txt`).
+English and French. The SquidBots launcher's own look (deep navy, teal light, the gold octopus crest and its line
+icons), so the launcher and the dashboard read as one product. The Cinzel and Inter fonts are bundled under the SIL
+Open Font License (`static/fonts/OFL.txt`).
 
 <br clear="right">
 

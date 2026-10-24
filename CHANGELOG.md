@@ -26,6 +26,8 @@
   player of the list kick, revive, unstuck, mute, set the level, send gold or an item, ban or unban the account,
   set its GM level. Each action is the server's own console command (the repack's console account), checked
   first and kept in `data\gm-actions.jsonl`. `"gmTools": false` in dashboard.json removes it.
+- **The launcher's look**: deep navy and teal light, the gold octopus crest, the launcher's line icons, Inter and Cinzel,
+  rounded glass panels; the realms keep the launcher's colours (gold CoA, violet Wildcard, orange Reborn).
 - Lighter: a tab in the background asks nothing, the names shared by every realm are read once, and the public copy
   and the local network page carry every realm (`realms.json`, `stats-<key>.json`; `publicRealms` limits them).
 
