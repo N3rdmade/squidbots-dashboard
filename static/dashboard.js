@@ -13,7 +13,7 @@ try { if (!REALM) REALM = localStorage.getItem("squidbots-realm") || ""; } catch
 if (!REALM_KEYS.includes(REALM)) REALM = "coa";
 let REALMS = null;          // the realms of this server, once read
 // The launcher owns the server's settings: the Settings page and the cards that write a .conf file only come back
-// when dashboard.json asks for them ("settingsPage": true). Known once /api/realms answered.
+// when dashboard.json asks for them ("settingsPage": true). Known once the realms list answered.
 let CONFIG_EDIT = false;
 let REALMS_READY = null;
 const realmFile = name => (!PUBLIC || REALM === "coa" ? name : name.replace(/\.json$/, "-" + REALM + ".json"));
@@ -37,6 +37,10 @@ const WORDS = {
     arenaBotsHelp: "Random bots play rated arenas on their own when a format is on: they keep one match going in it. Read when the game server starts.",
     arenaBotsApply: "Apply", arenaBotsMissing: "These settings are not in playerbots.conf.",
     arenaBotsSaved: "Saved in playerbots.conf (backed up first). Restart the game server for the bots to queue.",
+    pvpSetupTitle: "Why this page may stay empty",
+    pvpSetupJoin: "The bots never queue for battlegrounds or arenas: AiPlayerbot.RandomBotJoinBG is 0 in this realm's playerbots.conf. Set it to 1 in the launcher (Management, bot settings), then restart the realm.",
+    pvpSetupAuto: "The bots start no game on their own, they only fill the queues of players: AiPlayerbot.RandomBotAutoJoinBG is 0.",
+    pvpSetupStore: "The battlegrounds played are not kept, so their tables stay empty: Battleground.StoreStatistics.Enable is 0 in worldserver.conf. Set it to 1 in the launcher, then restart the realm.",
     logsTitle: "Journals are off",
     logsHelp: "This server's worldserver.conf does not write the journals that the chat feed, the most talkative bots, notable finds, spells cast and the battlegrounds on the PvP page read. The dashboard can add the missing lines (the file is backed up first).",
     logsMissing: "Missing or turned off: ", logsApply: "Turn the journals on",
@@ -157,6 +161,10 @@ const WORDS = {
     arenaBotsHelp: "Les bots aléatoires jouent des arènes cotées d'eux-mêmes quand un format est activé : ils y gardent un match en cours. Lu au démarrage du serveur de jeu.",
     arenaBotsApply: "Appliquer", arenaBotsMissing: "Ces réglages ne sont pas dans playerbots.conf.",
     arenaBotsSaved: "Enregistré dans playerbots.conf (sauvegardé avant). Redémarrez le serveur de jeu pour que les bots s'inscrivent.",
+    pvpSetupTitle: "Pourquoi cette page peut rester vide",
+    pvpSetupJoin: "Les bots ne s'inscrivent jamais en champ de bataille ni en arène : AiPlayerbot.RandomBotJoinBG vaut 0 dans le playerbots.conf de ce royaume. Mettez-le à 1 dans le launcher (Gestion, réglages des bots), puis redémarrez le royaume.",
+    pvpSetupAuto: "Les bots ne lancent aucune partie d'eux-mêmes, ils ne font que remplir les files des joueurs : AiPlayerbot.RandomBotAutoJoinBG vaut 0.",
+    pvpSetupStore: "Les champs de bataille joués ne sont pas enregistrés, leurs tableaux restent donc vides : Battleground.StoreStatistics.Enable vaut 0 dans worldserver.conf. Mettez-le à 1 dans le launcher, puis redémarrez le royaume.",
     logsTitle: "Journaux désactivés",
     logsHelp: "Le worldserver.conf de ce serveur n'écrit pas les journaux que lisent le fil de chat, les plus bavards, les trouvailles, les sorts lancés et les champs de bataille de la page JcJ. Le dashboard peut ajouter les lignes manquantes (le fichier est sauvegardé avant).",
     logsMissing: "Absent ou désactivé : ", logsApply: "Activer les journaux",
@@ -375,7 +383,7 @@ function showPage() {
   if (PAGE === "pvp") loadPvp();
   if (PAGE === "realms") renderRealms();
   /* private:start */if (PAGE === "chat") { loadFeed(); renderBotLang(); renderLogSetup("logSetupChat"); }
-  if (PAGE === "pvp") { renderLogSetup("logSetupPvp"); renderArenaBots(); }
+  if (PAGE === "pvp") { renderLogSetup("logSetupPvp"); renderArenaBots(); renderPvpSetup(); }
   if (PAGE === "armory" && typeof renderArmory === "function") renderArmory();
   if (typeof showServerPage === "function") showServerPage(PAGE);/* private:end */
 }
@@ -1081,6 +1089,20 @@ async function renderLogSetup(hostId) {
     if (answer.error) { note.textContent = answer.error; return; }
     host.innerHTML = '<p class="set-help">' + esc(W.logsDone) + "</p>";
   });
+}
+
+/* ---------------- what keeps the PvP page empty ---------------- */
+async function renderPvpSetup() {
+  const card = document.getElementById("pvpSetupCard");
+  if (!card) return;
+  let setup;
+  try { setup = await (await fetch("/api/pvpsetup", { cache: "no-store" })).json(); } catch (error) { card.hidden = true; return; }
+  const lines = [];
+  if (setup.joinBG === "0") lines.push(["bad", W.pvpSetupJoin]);
+  else if (setup.autoJoinBG === "0") lines.push(["warn", W.pvpSetupAuto]);
+  if (setup.storeStatistics === "0") lines.push(["warn", W.pvpSetupStore]);
+  document.getElementById("pvpSetup").innerHTML = lines.map(l => '<li class="hint ' + l[0] + '">' + esc(l[1]) + "</li>").join("");
+  card.hidden = !lines.length;
 }
 
 /* ---------------- the bots' chat language ---------------- */

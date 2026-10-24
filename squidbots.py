@@ -1145,6 +1145,17 @@ NO_CONFIG = ("The server's settings are changed in the launcher (Management tab)
              "\"settingsPage\": true in dashboard.json brings this page back for a server run without the launcher.")
 
 
+def pvp_setup(ctx):
+    """What decides whether this realm's bots play battlegrounds and arenas, and whether the games are kept, read
+    from the files its last start used (the launcher writes them; the PvP page only says what to change there)."""
+    modules = ctx.config_dir or ""
+    world = os.path.join(os.path.dirname(os.path.normpath(modules)), "worldserver.conf")
+    bots = os.path.join(modules, "playerbots.conf")
+    return {"joinBG": realms.conf_value(bots, "AiPlayerbot.RandomBotJoinBG"),
+            "autoJoinBG": realms.conf_value(bots, "AiPlayerbot.RandomBotAutoJoinBG"),
+            "storeStatistics": realms.conf_value(world, "Battleground.StoreStatistics.Enable")}
+
+
 def realms_overview():
     """GET /api/realms: every realm, its state now, and its figures when they were already read."""
     out = []
@@ -1624,6 +1635,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json(dict(botconfig.log_setup(CONTEXTS[0].config_dir), serverRunning=server_state(ctx).get("running", False)))
         elif path == "/api/pvp":
             self._send(ctx.pvp.get(), "application/json; charset=utf-8")
+        elif path == "/api/pvpsetup":
+            self._json(pvp_setup(ctx))
         elif path == "/api/art":
             self._json(art_status())
         elif path == "/api/live":

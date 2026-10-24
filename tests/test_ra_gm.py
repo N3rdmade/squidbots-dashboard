@@ -155,5 +155,16 @@ class MonitorTest(unittest.TestCase):
         self.assertIn("x_worldserver", watch.tracks["reborn"].events[0]["text"])
 
 
+class PublicCopyTest(unittest.TestCase):
+    def test_public_script_names_no_private_url(self):
+        """The public copy is refused when a private URL is left outside the private markers (comments included)."""
+        import re
+        script = open(os.path.join(HERE, "static", "dashboard.js"), encoding="utf-8").read()
+        public = re.sub(r"/\* private:start \*/.*?/\* private:end \*/", "", script, flags=re.S)
+        left = [line.strip() for line in public.splitlines() if "/api/" in line
+                and not line.strip().startswith(("const API = ", "const PVP_API = ", "const REALMS_API = "))]
+        self.assertEqual(left, [])
+
+
 if __name__ == "__main__":
     unittest.main()
