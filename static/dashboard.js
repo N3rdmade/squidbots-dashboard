@@ -12,6 +12,10 @@ let REALM = new URLSearchParams(location.search).get("realm") || "";
 try { if (!REALM) REALM = localStorage.getItem("squidbots-realm") || ""; } catch (error) { /* private window */ }
 if (!REALM_KEYS.includes(REALM)) REALM = "coa";
 let REALMS = null;          // the realms of this server, once read
+// The launcher owns the server's settings: the Settings page and the cards that write a .conf file only come back
+// when dashboard.json asks for them ("settingsPage": true). Known once /api/realms answered.
+let CONFIG_EDIT = false;
+let REALMS_READY = null;
 const realmFile = name => (!PUBLIC || REALM === "coa" ? name : name.replace(/\.json$/, "-" + REALM + ".json"));
 /* private:start */
 {
@@ -376,7 +380,9 @@ async function loadRealms() {
   try {
     const answer = await fetch(REALMS_API + (PUBLIC ? "?t=" + Date.now() : ""), { cache: "no-store" });
     if (!answer.ok) throw new Error(answer.status);
-    REALMS = (await answer.json()).realms || [];
+    const answerJson = await answer.json();
+    REALMS = answerJson.realms || [];
+    CONFIG_EDIT = answerJson.settingsPage === true;
   } catch (error) {
     REALMS = REALMS || [];
   }
@@ -384,6 +390,12 @@ async function loadRealms() {
   renderRealmSwitch();
   renderRealmChip();
   for (const node of document.querySelectorAll('.nav-link[href="#realms"]')) node.hidden = REALMS.length < 2;
+  for (const node of document.querySelectorAll('.nav-link[href="#settings"]')) node.hidden = !CONFIG_EDIT;
+  for (const id of ["arenaBotsCard", "botLangCard", "logSetupChatCard", "logSetupPvpCard"]) {
+    const card = document.getElementById(id);
+    if (card && !CONFIG_EDIT) card.hidden = true;
+  }
+  if (PAGE === "settings" && !CONFIG_EDIT) location.hash = "#world";
   if (PAGE === "realms") renderRealms();
 }
 function renderRealmSwitch() {
@@ -999,7 +1011,7 @@ const ARENA_KEYS = { "2v2": "AiPlayerbot.RandomBotAutoJoinBGRatedArena2v2Count",
 
 async function renderArenaBots() {
   const host = document.getElementById("arenaBots");
-  if (!host) return;
+  if (!host || !(await configEditable())) return;
   let config;
   try { config = await (await fetch("/api/config", { cache: "no-store" })).json(); } catch (error) { return; }
   const rows = {};
@@ -1031,7 +1043,7 @@ async function renderArenaBots() {
 // asks for them; a server set up without those lines leaves several cards empty for good.
 async function renderLogSetup(hostId) {
   const host = document.getElementById(hostId);
-  if (!host) return;
+  if (!host || !(await configEditable())) return;
   let state;
   try { state = await (await fetch("/api/logs", { cache: "no-store" })).json(); } catch (error) { return; }
   const card = host.closest(".card");
@@ -1058,7 +1070,7 @@ const BOT_LANG_KEY = "AiPlayerbot.BotTextLocale";
 
 async function renderBotLang() {
   const host = document.getElementById("botLang");
-  if (!host) return;
+  if (!host || !(await configEditable())) return;
   let config;
   try { config = await (await fetch("/api/config", { cache: "no-store" })).json(); } catch (error) { return; }
   const row = (config.settings || []).find(s => s.key === BOT_LANG_KEY);
@@ -2123,8 +2135,14 @@ function markChanges() {
 document.getElementById("settings").addEventListener("input", markChanges);
 document.getElementById("settings").addEventListener("change", markChanges);
 
+// Whether this dashboard may write the server's settings (see CONFIG_EDIT), once /api/realms answered.
+async function configEditable() {
+  if (REALMS_READY) await REALMS_READY;
+  return CONFIG_EDIT;
+}
+
 async function loadConfig() {
-  if (PUBLIC) return;
+  if (PUBLIC || !(await configEditable())) return;
   try {
     const answer = await fetch("/api/config", { cache: "no-store" });
     renderSettings(await answer.json());
@@ -2220,6 +2238,7 @@ async function refresh() {
   }
 }
 applyWords();
+REALMS_READY = loadRealms();
 showPage();
 /* private:start */loadConfig();
 loadArt();/* private:end */

@@ -9,8 +9,12 @@
   crashes and the bots of the last hours. A server without extra realms looks exactly as before.
 - Fixed for the extra realms: their bots (`RNDWC…`, `RNDWR…` accounts) counted as players; "online" and the
   memory followed any worldserver.exe (all realms run the same one); the server hours added up every realm's
-  uptime; the Settings page wrote files the launcher builds again at every start. Settings of a realm now go to
-  its `settings.json`, the launcher's own layer, and the values its game mode sets are shown greyed.
+  uptime; a crash report (the realms share one Crashes folder) now goes to the realm that went down, and a world
+  gone down without one counts as a crash too.
+- **The settings are the launcher's**: it writes every .conf file again at each start, so the dashboard no longer
+  edits them. The Settings page and the cards that wrote a .conf (bot arenas, the bots' chat language, turning the
+  journals on) are gone; the map extraction moved to the World page. `"settingsPage": true` in dashboard.json
+  brings them back for a server run without the launcher (a realm's settings then go to its `settings.json`).
 - **Server health** page: tick (the world's update time), players, bots, memory, processor and crashes now, curves
   over 24 hours and 7 days, the realm's starts, stops and crash reports, and plain advice when something is off.
   Measured once a minute at almost no cost: the process figures come from Windows directly, one `server info` on

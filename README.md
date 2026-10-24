@@ -61,9 +61,10 @@ finds them on its own and only reads that folder. A realm picker appears in the 
 launcher's colour); every page then shows the realm picked, and the **Realms** page shows all of them side by side.
 `http://localhost:8088/?realm=wildcard` opens a realm directly. Without a Royaumes folder nothing changes.
 
-The Settings page of a Wildcard or Reborn realm writes `Royaumes\<key>\settings.json`, the file the launcher builds
-that realm's settings from at every start; what the realm's game mode sets (classes, bot account prefix, ports) is
-shown greyed.
+The server's settings belong to the launcher (Management tab), which writes every .conf file again at each start: the
+dashboard reads them and changes none. `"settingsPage": true` in dashboard.json brings back the Settings page for a
+server run without the launcher; a Wildcard or Reborn realm's settings then go to `Royaumes\<key>\settings.json`, and
+what the realm's game mode sets is shown greyed.
 
 ## Server health, auction house, game master (private version only)
 

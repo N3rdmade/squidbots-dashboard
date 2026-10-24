@@ -28,7 +28,7 @@
   <!-- private:start --><a class="nav-link" href="#market"><i class="ico" data-icon="market" aria-hidden="true"></i><span data-i18n="navMarket"></span></a><!-- private:end -->
   <!-- private:start --><a class="nav-link" href="#gm"><i class="ico" data-icon="gm" aria-hidden="true"></i><span data-i18n="navGm"></span></a><!-- private:end -->
   <!-- private:start --><a class="nav-link" href="#armory"><i class="ico" data-icon="armory" aria-hidden="true"></i><span data-i18n="navArmory"></span></a><!-- private:end -->
-  <!-- private:start --><a class="nav-link" href="#settings"><i class="ico" data-icon="settings" aria-hidden="true"></i><span data-i18n="navSettings"></span></a><!-- private:end -->
+  <!-- private:start --><a class="nav-link" href="#settings" hidden><i class="ico" data-icon="settings" aria-hidden="true"></i><span data-i18n="navSettings"></span></a><!-- private:end -->
 </nav>
 
 <div class="content">
@@ -72,6 +72,12 @@
         <div data-focus-card><p class="empty" data-i18n="focusNone"></p></div>
       </section>
     </div>
+    <!-- private:start -->
+    <section class="card" id="artCard">
+      <h2>Maps <span class="sub" id="artSub"></span></h2>
+      <div id="artPanel"></div>
+    </section>
+    <!-- private:end -->
   </main>
 
   <main class="page" data-page="bots" hidden>
@@ -234,10 +240,6 @@
         <button class="btn primary" type="button" id="settingsApply" disabled data-i18n="applyChanges"></button>
         <span id="settingsStatus"></span>
       </div>
-    </section>
-    <section class="card" id="artCard">
-      <h2>Maps <span class="sub" id="artSub"></span></h2>
-      <div id="artPanel"></div>
     </section>
   </main>
   <!-- private:end -->

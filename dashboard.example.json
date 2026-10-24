@@ -22,7 +22,10 @@
   "_comment_web_icons": "The armory loads the item icons it cannot take from a local client from wow.zamimg.com, in the browser. false: never ask an outside site; those items keep their quality frame.",
   "webIcons": true,
 
-  "_comment_settings": "The Settings page edits the module .conf files in this folder. By default it looks in the repack's CoA-Bots\\Core\\configs\\modules, then Core\\configs\\modules.",
+  "_comment_settings_page": "The launcher owns the server's settings (it writes the .conf files again at every start): the dashboard only reads them. true brings back the Settings page and the cards that write a .conf file, for a server run without the launcher.",
+  "settingsPage": false,
+
+  "_comment_settings": "The Settings page (with settingsPage true) edits the module .conf files in this folder. By default it looks in the repack's CoA-Bots\\Core\\configs\\modules, then Core\\configs\\modules.",
   "configDir": "C:\\my-server\\server\\configs\\modules",
 
   "_comment_live": "Optional: the bot-status.json that mod-playerbots writes every few seconds when AiPlayerbot.CoaStatusFile names it (playerbots.conf), for live positions and what each bot is doing. Without it the map uses the last character save.",

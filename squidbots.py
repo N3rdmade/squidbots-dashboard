@@ -1106,6 +1106,9 @@ MONITOR = monitor.Monitor(REALMS, ROOT, lambda key: live_count(context(key)),
                           every=int(SETTINGS.get("monitorEvery", 60)), coa_exe=SETTINGS.get("worldserverPath"),
                           use_ra=SETTINGS.get("console", True) is not False)
 GM = gm.Gm(ROOT, mysql, os.path.join(HERE, "data", "gm-actions.jsonl"))
+# The server's settings belong to the launcher, which builds every .conf file again at each start: the dashboard
+# only reads them, unless dashboard.json asks for its own Settings page (a server run without the launcher).
+CONFIG_EDIT = SETTINGS.get("settingsPage") is True
 GM_ENABLED = SETTINGS.get("gmTools", True) is not False and SETTINGS.get("console", True) is not False
 
 
@@ -1138,6 +1141,10 @@ def summary(ctx):
     return out
 
 
+NO_CONFIG = ("The server's settings are changed in the launcher (Management tab): it writes them again at every start. "
+             "\"settingsPage\": true in dashboard.json brings this page back for a server run without the launcher.")
+
+
 def realms_overview():
     """GET /api/realms: every realm, its state now, and its figures when they were already read."""
     out = []
@@ -1148,7 +1155,7 @@ def realms_overview():
                         crashes=server_state(ctx)["crashes24h"],
                         spark=[{"ts": p["ts"], "bots": p.get("bots"), "tick": p.get("tick"), "ram": p.get("ram")}
                                for p in points[-180:]]))
-    return {"realms": out, "monitorEvery": MONITOR.every, "gm": GM_ENABLED}
+    return {"realms": out, "monitorEvery": MONITOR.every, "gm": GM_ENABLED, "settingsPage": CONFIG_EDIT}
 
 
 def public_contexts():
@@ -1608,6 +1615,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 player["zoneName"] = zones.get(player["zone"], "")
             self._json(payload, status)
         elif path == "/api/config":
+            if not CONFIG_EDIT:
+                self._json({"error": NO_CONFIG}, 403)
+                return
             self._json(config_payload(ctx))
         elif path == "/api/logs":
             # A launcher realm takes its journals from the CoA realm's worldserver.conf at every start.
@@ -1710,6 +1720,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._json({"error": problem}, 400)
                 return
             self._json(art_status())
+            return
+        if path in ("/api/logs", "/api/config") and not CONFIG_EDIT:
+            self._json({"error": NO_CONFIG}, 403)
             return
         if path == "/api/logs":
             if not self._local_only():
