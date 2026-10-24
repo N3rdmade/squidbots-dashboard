@@ -1705,6 +1705,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         path = self.path.split("?")[0]
         ctx = self._realm()
+        if path == "/api/pvpsetup":
+            # Keeping the battlegrounds played is for this dashboard alone: nothing else sets it, and the launcher does
+            # not manage it. Written where every realm's next start takes it from (the CoA realm's template and file).
+            if not self._local_only():
+                return
+            try:
+                changed, _backup = botconfig.enable_logs(CONTEXTS[0].config_dir, CONFIG_BACKUPS, botconfig.BG_STATISTICS)
+            except Exception as error:           # noqa: BLE001
+                self._json({"error": "%s: %s" % (type(error).__name__, error)}, 500)
+                return
+            self._json(dict(pvp_setup(ctx), changed=changed))
+            return
         if path == "/api/gm":
             if not self._local_only():
                 return

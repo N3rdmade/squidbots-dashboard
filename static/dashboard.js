@@ -40,7 +40,8 @@ const WORDS = {
     pvpSetupTitle: "Why this page may stay empty",
     pvpSetupJoin: "The bots never queue for battlegrounds or arenas: AiPlayerbot.RandomBotJoinBG is 0 in this realm's playerbots.conf. Set it to 1 in the launcher (Management, bot settings), then restart the realm.",
     pvpSetupAuto: "The bots start no game on their own, they only fill the queues of players: AiPlayerbot.RandomBotAutoJoinBG is 0.",
-    pvpSetupStore: "The battlegrounds played are not kept, so their tables stay empty: Battleground.StoreStatistics.Enable is 0 in worldserver.conf. Set it to 1 in the launcher, then restart the realm.",
+    pvpSetupStore: "The battlegrounds played are not kept, so their tables stay empty (Battleground.StoreStatistics.Enable = 0 in worldserver.conf). The dashboard alone uses it: it can turn it on for every realm.",
+    pvpSetupStoreButton: "Keep the battlegrounds", pvpSetupStoreDone: "Done (the file is backed up first). Restart the server, the CoA realm first, then each realm: the battlegrounds are kept from then on.",
     logsTitle: "Journals are off",
     logsHelp: "This server's worldserver.conf does not write the journals that the chat feed, the most talkative bots, notable finds, spells cast and the battlegrounds on the PvP page read. The dashboard can add the missing lines (the file is backed up first).",
     logsMissing: "Missing or turned off: ", logsApply: "Turn the journals on",
@@ -164,7 +165,8 @@ const WORDS = {
     pvpSetupTitle: "Pourquoi cette page peut rester vide",
     pvpSetupJoin: "Les bots ne s'inscrivent jamais en champ de bataille ni en arène : AiPlayerbot.RandomBotJoinBG vaut 0 dans le playerbots.conf de ce royaume. Mettez-le à 1 dans le launcher (Gestion, réglages des bots), puis redémarrez le royaume.",
     pvpSetupAuto: "Les bots ne lancent aucune partie d'eux-mêmes, ils ne font que remplir les files des joueurs : AiPlayerbot.RandomBotAutoJoinBG vaut 0.",
-    pvpSetupStore: "Les champs de bataille joués ne sont pas enregistrés, leurs tableaux restent donc vides : Battleground.StoreStatistics.Enable vaut 0 dans worldserver.conf. Mettez-le à 1 dans le launcher, puis redémarrez le royaume.",
+    pvpSetupStore: "Les champs de bataille joués ne sont pas enregistrés, leurs tableaux restent donc vides (Battleground.StoreStatistics.Enable = 0 dans worldserver.conf). Seul le dashboard s'en sert : il peut l'activer pour tous les royaumes.",
+    pvpSetupStoreButton: "Enregistrer les champs de bataille", pvpSetupStoreDone: "C'est fait (le fichier est sauvegardé avant). Redémarrez le serveur, le royaume CoA d'abord, puis chaque royaume : les champs de bataille seront enregistrés à partir de là.",
     logsTitle: "Journaux désactivés",
     logsHelp: "Le worldserver.conf de ce serveur n'écrit pas les journaux que lisent le fil de chat, les plus bavards, les trouvailles, les sorts lancés et les champs de bataille de la page JcJ. Le dashboard peut ajouter les lignes manquantes (le fichier est sauvegardé avant).",
     logsMissing: "Absent ou désactivé : ", logsApply: "Activer les journaux",
@@ -1100,10 +1102,28 @@ async function renderPvpSetup() {
   const lines = [];
   if (setup.joinBG === "0") lines.push(["bad", W.pvpSetupJoin]);
   else if (setup.autoJoinBG === "0") lines.push(["warn", W.pvpSetupAuto]);
-  if (setup.storeStatistics === "0") lines.push(["warn", W.pvpSetupStore]);
-  document.getElementById("pvpSetup").innerHTML = lines.map(l => '<li class="hint ' + l[0] + '">' + esc(l[1]) + "</li>").join("");
+  if (setup.storeStatistics === "0") lines.push(["warn", W.pvpSetupStore, true]);
+  if (setup.changed && setup.changed.length) lines.push(["good", W.pvpSetupStoreDone]);
+  document.getElementById("pvpSetup").innerHTML = lines.map(l => '<li class="hint ' + l[0] + '">' + esc(l[1]) +
+    (l[2] ? ' <button class="btn small" type="button" id="pvpStoreButton">' + esc(W.pvpSetupStoreButton) + "</button>" : "") +
+    "</li>").join("");
   card.hidden = !lines.length;
 }
+document.addEventListener("click", async event => {
+  if (!event.target.closest("#pvpStoreButton")) return;
+  event.target.disabled = true;
+  try {
+    const answer = await fetch("/api/pvpsetup", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const setup = await answer.json();
+    if (!answer.ok) throw new Error(setup.error || answer.status);
+    // The file now says 1, the server still runs with 0 until it restarts: say so in place of the button.
+    const list = document.getElementById("pvpSetup");
+    list.innerHTML = '<li class="hint good">' + esc(W.pvpSetupStoreDone) + "</li>";
+  } catch (error) {
+    event.target.disabled = false;
+    event.target.textContent = String(error);
+  }
+});
 
 /* ---------------- the bots' chat language ---------------- */
 // AiPlayerbot.BotTextLocale in playerbots.conf: the language of every line the bots say on their own

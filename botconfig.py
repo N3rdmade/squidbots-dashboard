@@ -474,25 +474,30 @@ def log_setup(conf_dir):
             "missing": [key for key, _ in LOG_LINES if not any(_log_line_ok(key, values.get(key)) for values in found)]}
 
 
-def enable_logs(conf_dir, backup_dir):
+# The one journal line nothing else sets: CoA Bots writes its loggers into worldserver.conf at every start, not this.
+BG_STATISTICS = [("Battleground.StoreStatistics.Enable", "1")]
+
+
+def enable_logs(conf_dir, backup_dir, lines=None):
     """Write the missing journal lines into worldserver.conf, and into its template when the server
-    rebuilds worldserver.conf from one at every start. Returns (changed keys, backed-up file names)."""
+    rebuilds worldserver.conf from one at every start. Returns (changed keys, backed-up file names).
+    `lines` limits it to some of LOG_LINES (BG_STATISTICS, say)."""
     targets = [path for path in (worldserver_template(conf_dir), worldserver_conf(conf_dir))
                if path and os.path.exists(path)]
     if not targets:
         raise FileNotFoundError("%s not found next to %s" % (WORLDSERVER, conf_dir))
     changed = []
     for path in targets:
-        for key in _write_log_lines(path, backup_dir):
+        for key in _write_log_lines(path, backup_dir, lines):
             if key not in changed:
                 changed.append(key)
     return changed, ", ".join(os.path.basename(path) for path in targets) if changed else None
 
 
-def _write_log_lines(path, backup_dir):
+def _write_log_lines(path, backup_dir, lines=None):
     """Set the journal lines missing from one file, after a backup of it. Returns the keys written."""
     found = _log_values(path)
-    wanted = [(key, value) for key, value in LOG_LINES if not _log_line_ok(key, found.get(key))]
+    wanted = [(key, value) for key, value in (lines or LOG_LINES) if not _log_line_ok(key, found.get(key))]
     if not wanted:
         return []
     raw = open(path, "rb").read()
