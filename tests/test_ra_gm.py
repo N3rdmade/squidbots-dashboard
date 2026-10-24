@@ -12,7 +12,7 @@ import unittest
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 
-from webapp import gm, ra, realms  # noqa: E402
+from webapp import gm, monitor, ra, realms  # noqa: E402
 
 
 def fake_console(answer, received):
@@ -122,6 +122,21 @@ class RealmsTest(unittest.TestCase):
                                                                                  "AiPlayerbot.RandomBotAccountPrefix": "x"}})
         self.assertEqual(written, ["AiPlayerbot.MaxRandomBots"])
         self.assertEqual(realms.own_settings(root, "reborn"), {"playerbots.conf": {"AiPlayerbot.MaxRandomBots": "40"}})
+
+
+class MonitorTest(unittest.TestCase):
+    def test_world_gone_with_its_pid_recorded_is_a_crash(self):
+        here = tempfile.mkdtemp()
+        realm = realms.Realm("reborn", 3, "Reborn", {"auth": "a", "characters": "c", "world": "w"}, here, here, [], here,
+                             "rndwr", here=here)
+        realm.pid = lambda: 42                         # the launcher still records pid 42: nobody stopped it
+        watch = monitor.Monitor([realm], here, lambda key: None, every=60, use_ra=False)
+        states = iter([{"running": True, "pid": 42, "at": 1}, {"running": False, "pid": None, "at": 2}])
+        watch.look = lambda realm, others=(), with_ra=True: next(states)
+        watch.round()
+        watch.round()
+        self.assertEqual([e["kind"] for e in watch.tracks["reborn"].events], ["down"])
+        self.assertEqual(len(watch.downs("reborn", 0)), 1)
 
 
 if __name__ == "__main__":

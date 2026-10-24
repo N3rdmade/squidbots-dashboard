@@ -686,7 +686,7 @@ h2 .state-badge { margin-left: 8px; vertical-align: 3px; }
 .event::before { content: ""; position: absolute; left: 0; top: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
 .event.start::before { background: var(--good); }
 .event.stop::before { background: var(--gold-deep); }
-.event.crash::before { background: var(--bad); box-shadow: 0 0 6px var(--bad); }
+.event.crash::before, .event.down::before { background: var(--bad); box-shadow: 0 0 6px var(--bad); }
 .when { color: var(--text-muted); font-size: 12px; min-width: 92px; }
 
 /* ---------- auction house ---------- */

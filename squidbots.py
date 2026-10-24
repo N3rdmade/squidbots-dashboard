@@ -650,7 +650,8 @@ def server_state(ctx):
     now = MONITOR.state(ctx.realm.key)
     state["running"], state["ramMo"] = bool(now.get("running")), now.get("ramMo")
     since = (COUNT_FROM if ctx.realm.key == "coa" else None) or time.time() - 24 * 3600
-    crashes = recent_crashes(ctx.realm.crashes, since)
+    # Crash reports, and the times the world went down on its own without writing one.
+    crashes = recent_crashes(ctx.realm.crashes, since) + MONITOR.downs(ctx.realm.key, since)
     state["crashes24h"] = len(crashes)
     if crashes:
         state["lastCrash"] = datetime.datetime.fromtimestamp(max(crashes)).strftime("%d/%m %H:%M")

@@ -176,7 +176,11 @@ class Monitor:
                 state = {"running": False, "error": str(error), "at": round(time.time())}
             happened = False
             if before.get("running") != state.get("running") and "at" in before:
-                track.event("start" if state.get("running") else "stop")
+                # The launcher forgets a realm's pid (.state.json) when it stops it: a world gone while its pid is
+                # still recorded stopped on its own, a crash even when the core wrote no report (a heap fault, say).
+                gone = (not state.get("running") and realm.key != "coa" and before.get("pid")
+                        and realm.pid() == before.get("pid"))
+                track.event("start" if state.get("running") else "down" if gone else "stop")
                 happened = True
             for stamp in self._new_crashes(realm, track):
                 track.event("crash", time.strftime("%d/%m %H:%M", time.localtime(stamp)))
@@ -224,6 +228,12 @@ class Monitor:
             with self.lock:
                 track.state = self.look(realm, self._claimed(), with_ra=False)
         return track.state
+
+    def downs(self, key, since):
+        """When the realm's world stopped on its own (no crash report needed) since `since`."""
+        track = self.tracks.get(key)
+        with self.lock:
+            return [e["ts"] for e in (track.events if track else []) if e["kind"] == "down" and e["ts"] > since]
 
     def series(self, key, span="day"):
         track = self.tracks.get(key)
