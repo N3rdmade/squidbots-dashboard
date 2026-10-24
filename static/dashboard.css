@@ -597,3 +597,132 @@ a.char-card.link:hover { border-color: var(--gold); background: rgba(214, 176, 9
   .doll-bottom { grid-template-columns: 1fr; }
   .item-tip { display: none; }
 }
+
+/* ---------- realms (2.8): one accent per realm, the launcher's own colours ---------- */
+:root, .mode-coa, body[data-realm="coa"] { --realm: #d9b25b; --realm-glow: rgba(217, 178, 91, .28); }
+.mode-wildcard, body[data-realm="wildcard"] { --realm: #c27bff; --realm-glow: rgba(194, 123, 255, .30); }
+.mode-reborn, body[data-realm="reborn"] { --realm: #ff8a3d; --realm-glow: rgba(255, 138, 61, .30); }
+body[data-realm="wildcard"] { --page-glow: rgba(194, 123, 255, .10); }
+body[data-realm="reborn"] { --page-glow: rgba(255, 138, 61, .10); }
+.ico[data-icon="realms"]::before { content: "🏰"; }
+.ico[data-icon="server"]::before { content: "📈"; }
+.ico[data-icon="market"]::before { content: "💰"; }
+.ico[data-icon="gm"]::before { content: "🛡"; }
+.nav-link[hidden] { display: none; }
+
+.gem { width: 10px; height: 10px; flex: none; transform: rotate(45deg); border-radius: 2px;
+  background: linear-gradient(135deg, #fff8 0, var(--realm) 45%, #0006 100%); box-shadow: 0 0 8px var(--realm-glow), 0 0 0 1px #000; }
+.gem.big { width: 18px; height: 18px; border-radius: 3px; }
+
+.realm-switch { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; padding: 0 0 12px; border-bottom: 1px solid var(--hairline); }
+.realm-switch[hidden] { display: none; }
+.realm-pick { display: flex; align-items: center; gap: 9px; width: 100%; padding: 6px 9px; cursor: pointer; text-align: left;
+  font: 600 12.5px var(--body); color: var(--text-secondary); background: rgba(0, 0, 0, .25);
+  border: 1px solid var(--hairline); border-radius: 4px; transition: border-color .15s, background .15s; }
+.realm-pick:hover { color: var(--text-primary); border-color: var(--realm); }
+.realm-pick.current { color: var(--text-primary); border-color: var(--realm);
+  background: linear-gradient(90deg, var(--realm-glow), rgba(0, 0, 0, .2) 70%); box-shadow: inset 3px 0 0 var(--realm); }
+.rp-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-state { font: 600 11px var(--body); font-variant-numeric: tabular-nums; color: var(--text-muted); display: inline-flex; align-items: center; gap: 5px; }
+.rp-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+.rp-state.running::before { background: var(--good); box-shadow: 0 0 6px var(--good); }
+.rp-state.starting::before { background: var(--gold-bright); animation: pulse 1.2s ease-in-out infinite; }
+.rp-state.disabled::before { background: transparent; border: 1px solid var(--text-muted); }
+
+.realm-chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; border-radius: 999px; margin-right: auto;
+  font: 600 12px var(--body); color: var(--realm); border: 1px solid var(--realm); background: rgba(0, 0, 0, .35);
+  box-shadow: 0 0 14px var(--realm-glow); }
+.realm-chip[hidden] { display: none; }
+.realm-chip::before { content: ""; width: 8px; height: 8px; transform: rotate(45deg); background: var(--realm); }
+.topbar h1:has(+ .realm-chip:not([hidden])) { margin-right: 0; }
+
+.realm-totals { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 900px) { .realm-totals { grid-template-columns: repeat(4, 1fr); } }
+.realm-grid { display: grid; gap: 20px; }
+@media (min-width: 1100px) { .realm-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 760px) and (max-width: 1099px) { .realm-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.realm-card { position: relative; display: flex; flex-direction: column; gap: 14px; padding: 18px; cursor: pointer; overflow: hidden;
+  background: radial-gradient(420px 180px at 0 0, var(--realm-glow), transparent 70%),
+              linear-gradient(180deg, rgba(31, 25, 18, .96), rgba(19, 15, 11, .97));
+  border: 1px solid var(--border); border-top: 3px solid var(--realm); border-radius: 4px; box-shadow: var(--shadow);
+  transition: transform .15s, box-shadow .15s, border-color .15s; }
+.realm-card:hover, .realm-card:focus-visible { transform: translateY(-2px); outline: none;
+  box-shadow: var(--shadow), 0 0 0 1px var(--realm), 0 10px 30px var(--realm-glow); }
+.realm-card.stopped, .realm-card.disabled { filter: saturate(.55); }
+.realm-card header { display: flex; align-items: center; gap: 12px; }
+.realm-card h3 { margin: 0; font: 700 18px/1.2 var(--display); color: var(--text-primary); letter-spacing: .02em; }
+.realm-card footer { margin-top: auto; display: flex; justify-content: flex-end; }
+.state-badge { margin-left: auto; padding: 2px 9px; border-radius: 999px; font: 600 11px var(--body); letter-spacing: .04em;
+  text-transform: uppercase; border: 1px solid currentColor; color: var(--text-muted); white-space: nowrap; }
+h2 .state-badge { margin-left: 8px; vertical-align: 3px; }
+.state-badge.running { color: var(--good); box-shadow: 0 0 10px rgba(54, 199, 95, .25); }
+.state-badge.starting { color: var(--gold-bright); }
+.state-badge.stopped { color: var(--bad); }
+.realm-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 1400px) { .realm-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.rt { display: flex; flex-direction: column; padding: 8px 10px; border-radius: 3px; background: rgba(0, 0, 0, .28); border: 1px solid var(--hairline); min-width: 0; }
+.rt .label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rt b { font: 700 19px/1.2 var(--display); color: var(--text-primary); margin-top: 2px; }
+.rt.good b, .figure.good .value { color: var(--good); }
+.rt.warn b, .figure.warn .value { color: var(--gold-bright); }
+.rt.bad b, .figure.bad .value { color: var(--bad); }
+.realm-spark { display: flex; flex-direction: column; gap: 2px; }
+.spark { width: 100%; height: 44px; display: block; }
+
+/* ---------- server health ---------- */
+.server-head { display: flex; align-items: center; gap: 14px; border-left: 3px solid var(--realm); }
+.server-head h2 { margin: 0; }
+.perf-charts { display: grid; gap: 18px; }
+@media (min-width: 1300px) { .perf-charts { grid-template-columns: 1fr 1fr; } }
+.chart-title { margin: 6px 0 0; font: 600 12px var(--body); color: var(--text-secondary); text-transform: uppercase; letter-spacing: .07em; }
+.hints, .events, .gm-journal { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.hint { padding: 9px 12px 9px 34px; position: relative; border-radius: 3px; font-size: 13px; background: rgba(0, 0, 0, .3); border: 1px solid var(--hairline); }
+.hint::before { position: absolute; left: 11px; top: 8px; font-size: 14px; }
+.hint.good::before { content: "✔"; color: var(--good); }
+.hint.warn::before { content: "⚠"; color: var(--gold-bright); }
+.hint.bad::before { content: "✖"; color: var(--bad); }
+.hint.bad { border-color: rgba(226, 80, 61, .45); }
+.event { display: flex; gap: 10px; align-items: baseline; font-size: 13px; padding-left: 14px; position: relative; }
+.event::before { content: ""; position: absolute; left: 0; top: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+.event.start::before { background: var(--good); }
+.event.stop::before { background: var(--gold-deep); }
+.event.crash::before { background: var(--bad); box-shadow: 0 0 6px var(--bad); }
+.when { color: var(--text-muted); font-size: 12px; min-width: 92px; }
+
+/* ---------- auction house ---------- */
+.coin { font-variant-numeric: tabular-nums; margin-right: 4px; white-space: nowrap; }
+.coin::after { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-left: 3px; vertical-align: 0; }
+.coin.g::after { background: radial-gradient(circle at 35% 35%, #fff3b0, #d9a520 60%, #7c5c1f); }
+.coin.s::after { background: radial-gradient(circle at 35% 35%, #ffffff, #b8c0c8 60%, #5d6670); }
+.coin.c::after { background: radial-gradient(circle at 35% 35%, #ffd2a8, #b8692e 60%, #5d2f12); }
+.figure .value .coin { font-size: 21px; }
+
+/* ---------- game master ---------- */
+.gm-label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.gm-console textarea, .gm-filter, .gm-row input, .gm-row select {
+  font: 13px var(--body); color: var(--text-primary); background: #0b0806; border: 1px solid var(--border); border-radius: 3px; padding: 6px 9px; }
+.gm-console textarea { width: 100%; resize: vertical; }
+.gm-filter { width: 100%; margin-bottom: 10px; }
+.gm-buttons, .gm-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.gm-row input[type="number"] { width: 92px; }
+.gm-row input[type="text"] { flex: 1 1 120px; min-width: 0; }
+.gm-row.danger { padding-top: 10px; border-top: 1px dashed rgba(226, 80, 61, .35); }
+.gm-what { font-size: 12px; color: var(--text-muted); min-width: 70px; }
+.gm-result { margin: 10px 0 0; font-size: 12.5px; min-height: 18px; color: var(--text-secondary); white-space: pre-wrap; }
+.gm-result.ok { color: var(--good); }
+.gm-result.bad { color: var(--bad); }
+.gm-table tbody tr { cursor: pointer; }
+.gm-table tbody tr.picked td { background: var(--realm-glow); }
+.tag { display: inline-block; padding: 0 6px; margin-left: 4px; border-radius: 3px; font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .05em; border: 1px solid var(--border); color: var(--gold); }
+.tag.bad { color: var(--bad); border-color: var(--bad); }
+.tag.warn { color: var(--gold-bright); border-color: var(--gold-bright); }
+.gold { color: var(--gold-bright); }
+.gm-journal li { font-size: 12.5px; padding: 7px 9px; border-radius: 3px; background: rgba(0, 0, 0, .28); border-left: 3px solid var(--good); }
+.gm-journal li.bad { border-left-color: var(--bad); }
+.gm-journal code { font-family: Consolas, "Cascadia Mono", monospace; color: var(--text-primary); }
+
+@media (max-width: 760px) {
+  .realm-switch { display: none; }
+  .realm-chip { margin: 0; }
+}

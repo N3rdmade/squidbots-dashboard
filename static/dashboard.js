@@ -1,6 +1,30 @@
 const API = "/api/stats";
 const PUBLIC = false;
 const PVP_API = "/api/pvp";
+const REALMS_API = "/api/realms";
+
+/* ---------------- realms ---------------- */
+// A server of the launcher runs up to three realms (CoA, Wildcard, Reborn); the page shows one at a time, chosen by
+// ?realm=<key> (the launcher opens it so) or the last one picked. Each realm's figures come from its own databases
+// and journals: the local page adds realm=<key> to its questions, the public copy reads stats-<key>.json beside stats.json.
+const REALM_KEYS = ["coa", "wildcard", "reborn"];
+let REALM = new URLSearchParams(location.search).get("realm") || "";
+try { if (!REALM) REALM = localStorage.getItem("squidbots-realm") || ""; } catch (error) { /* private window */ }
+if (!REALM_KEYS.includes(REALM)) REALM = "coa";
+let REALMS = null;          // the realms of this server, once read
+const realmFile = name => (!PUBLIC || REALM === "coa" ? name : name.replace(/\.json$/, "-" + REALM + ".json"));
+/* private:start */
+{
+  const ask = window.fetch.bind(window);
+  window.fetch = (url, options) => {
+    if (typeof url === "string" && url.startsWith("/api/") && !/[?&]realm=/.test(url)) {
+      url += (url.includes("?") ? "&" : "?") + "realm=" + REALM;
+    }
+    return ask(url, options);
+  };
+}
+/* private:end */
+document.body.dataset.realm = REALM;
 
 /* ---------------- words ---------------- */
 const WORDS = {
@@ -47,8 +71,19 @@ const WORDS = {
     searchBot: "Search a bot", otherLang: "FR",
     navWorld: "World", navBots: "Bots", navStats: "Stats",
     navChat: "Chat & Loot", navSettings: "Settings", navArmory: "Armory",
-    pageTitles: { world: "World", bots: "Bots", stats: "Stats",
+    navRealms: "Realms", navServer: "Server", navMarket: "Auction house", navGm: "Game master",
+    pageTitles: { world: "World", bots: "Bots", stats: "Stats", realms: "Realms", server: "Server health",
+      market: "Auction house", gm: "Game master tools",
       chat: "Chat & Loot", pvp: "PvP", settings: "Settings", armory: "Armory" },
+    realmModes: { coa: "Conquest of Azeroth", wildcard: "Wildcard", reborn: "Warcraft Reborn" },
+    realmState: { running: "Online", stopped: "Stopped", starting: "Starting", disabled: "Turned off" },
+    realmsTitle: "Every realm of this server", realmsSub: "click a realm to open its pages",
+    realmsTotal: "All realms", realmOpen: "Open", realmShown: "Shown",
+    realmBots: "Bots online", realmPlayers: "Players online", realmLevel: "Average level",
+    realmTick: "Server tick", realmRam: "Memory", realmCpu: "Processor", realmCrashes: "Crashes, 24 h",
+    realmTotalBots: n => n + " bots in all", realmNoFigures: "No figures yet: the database did not answer.",
+    realmSpark: "bots online, last hours", realmTickHelp: "time the world takes for one update: under 100 ms is smooth",
+    realmUptime: "Up for ",
     mapTitle: "Map", focusTitle: "Watching", focusNone: "Pick a bot on the map or in the Bots list to follow it here.",
     rosterTitle: "Every bot online", rosterFilter: "Filter by name, zone or class",
     sortLevel: "Level", sortName: "Name", sortZone: "Zone",
@@ -156,8 +191,19 @@ const WORDS = {
     searchBot: "Chercher un bot", otherLang: "EN",
     navWorld: "Monde", navBots: "Bots", navStats: "Statistiques",
     navChat: "Chat et butin", navSettings: "Réglages", navArmory: "Armurerie",
-    pageTitles: { world: "Monde", bots: "Bots", stats: "Statistiques",
+    navRealms: "Royaumes", navServer: "Serveur", navMarket: "Hôtel des ventes", navGm: "Maître de jeu",
+    pageTitles: { world: "Monde", bots: "Bots", stats: "Statistiques", realms: "Royaumes", server: "Santé du serveur",
+      market: "Hôtel des ventes", gm: "Outils de maître de jeu",
       chat: "Chat et butin", pvp: "JcJ", settings: "Réglages", armory: "Armurerie" },
+    realmModes: { coa: "Conquest of Azeroth", wildcard: "Wildcard", reborn: "Warcraft Reborn" },
+    realmState: { running: "En ligne", stopped: "Arrêté", starting: "Démarrage", disabled: "Désactivé" },
+    realmsTitle: "Tous les royaumes du serveur", realmsSub: "cliquez sur un royaume pour ouvrir ses pages",
+    realmsTotal: "Tous les royaumes", realmOpen: "Ouvrir", realmShown: "Affiché",
+    realmBots: "Bots en ligne", realmPlayers: "Joueurs en ligne", realmLevel: "Niveau moyen",
+    realmTick: "Tick serveur", realmRam: "Mémoire", realmCpu: "Processeur", realmCrashes: "Plantages, 24 h",
+    realmTotalBots: n => n + " bots en tout", realmNoFigures: "Pas encore de chiffres : la base n'a pas répondu.",
+    realmSpark: "bots en ligne, dernières heures", realmTickHelp: "temps d'une mise à jour du monde : sous 100 ms, c'est fluide",
+    realmUptime: "En ligne depuis ",
     mapTitle: "Carte", focusTitle: "Suivi", focusNone: "Choisissez un bot sur la carte ou dans la liste des bots pour le suivre ici.",
     rosterTitle: "Tous les bots en ligne", rosterFilter: "Filtrer par nom, zone ou classe",
     sortLevel: "Niveau", sortName: "Nom", sortZone: "Zone",
@@ -277,10 +323,13 @@ function renderFooter() {
 
 /* ---------------- pages ---------------- */
 // The public copy is read-only: no settings, and no armory (it asks the game database, see static/armory.js).
-const PAGES = ["world", "bots", "stats", "chat", "pvp", "settings", "armory"]
-  .filter(page => !PUBLIC || (page !== "settings" && page !== "armory"));
+const PRIVATE_PAGES = ["settings", "armory", "server", "market", "gm"];
+const PAGES = ["realms", "world", "bots", "stats", "chat", "pvp", "server", "market", "gm", "settings", "armory"]
+  .filter(page => !PUBLIC || !PRIVATE_PAGES.includes(page));
 if (PUBLIC) {
-  for (const node of document.querySelectorAll('.nav-link[href="#settings"], .nav-link[href="#armory"]')) node.remove();
+  for (const page of PRIVATE_PAGES) {
+    for (const node of document.querySelectorAll('.nav-link[href="#' + page + '"]')) node.remove();
+  }
 }
 // "#armory/Name": the page is the part before the slash, the rest is for the page itself.
 function hashParts() {
@@ -291,19 +340,136 @@ function hashParts() {
 let PAGE = "world";
 function showPage() {
   const wanted = hashParts()[0];
-  PAGE = PAGES.includes(wanted) ? wanted : "world";
+  PAGE = PAGES.includes(wanted) && !(wanted === "realms" && REALMS && REALMS.length < 2) ? wanted : "world";
   for (const page of document.querySelectorAll(".page")) page.hidden = page.dataset.page !== PAGE;
   for (const link of document.querySelectorAll(".nav-link")) {
     if (link.getAttribute("href") === "#" + PAGE) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
   document.getElementById("pageTitle").textContent = W.pageTitles[PAGE];
+  renderRealmChip();
   if (PAGE === "pvp") loadPvp();
+  if (PAGE === "realms") renderRealms();
   /* private:start */if (PAGE === "chat") { loadFeed(); renderBotLang(); renderLogSetup("logSetupChat"); }
   if (PAGE === "pvp") { renderLogSetup("logSetupPvp"); renderArenaBots(); }
-  if (PAGE === "armory" && typeof renderArmory === "function") renderArmory();/* private:end */
+  if (PAGE === "armory" && typeof renderArmory === "function") renderArmory();
+  if (typeof showServerPage === "function") showServerPage(PAGE);/* private:end */
 }
 window.addEventListener("hashchange", showPage);
+
+/* ---------------- realm switcher ---------------- */
+function realmName(realm) { return realm ? realm.name : W.realmModes[REALM]; }
+function realmStateOf(realm) {
+  const state = realm.state || {};
+  if (realm.disabled) return "disabled";
+  if (PUBLIC) return realm.running ? "running" : "stopped";
+  return state.running ? "running" : state.starting ? "starting" : "stopped";
+}
+function openRealm(key) {
+  try { localStorage.setItem("squidbots-realm", key); } catch (error) { /* ignore */ }
+  const params = new URLSearchParams(location.search);
+  params.set("realm", key);
+  const page = PAGE === "realms" ? "world" : PAGE;
+  location.href = location.pathname + "?" + params.toString() + "#" + page;
+}
+async function loadRealms() {
+  try {
+    const answer = await fetch(REALMS_API + (PUBLIC ? "?t=" + Date.now() : ""), { cache: "no-store" });
+    if (!answer.ok) throw new Error(answer.status);
+    REALMS = (await answer.json()).realms || [];
+  } catch (error) {
+    REALMS = REALMS || [];
+  }
+  if (!REALMS.some(r => r.key === REALM) && REALM !== "coa") { openRealm("coa"); return; }
+  renderRealmSwitch();
+  renderRealmChip();
+  for (const node of document.querySelectorAll('.nav-link[href="#realms"]')) node.hidden = REALMS.length < 2;
+  if (PAGE === "realms") renderRealms();
+}
+function renderRealmSwitch() {
+  const host = document.getElementById("realmSwitch");
+  if (!host) return;
+  host.hidden = !REALMS || REALMS.length < 2;
+  if (host.hidden) return;
+  host.innerHTML = REALMS.map(realm => {
+    const state = realmStateOf(realm);
+    const bots = PUBLIC ? realm.bots : (realm.state || {}).bots;
+    return '<button type="button" class="realm-pick mode-' + esc(realm.mode) + (realm.key === REALM ? " current" : "") +
+      '" data-realm="' + esc(realm.key) + '" aria-pressed="' + (realm.key === REALM) + '">' +
+      '<span class="gem" aria-hidden="true"></span><span class="rp-name">' + esc(W.realmModes[realm.mode] || realm.name) + "</span>" +
+      '<span class="rp-state ' + state + '" title="' + esc(W.realmState[state]) + '">' +
+      (state === "running" && bots != null ? num(bots) : "") + "</span></button>";
+  }).join("");
+}
+document.addEventListener("click", event => {
+  const pick = event.target.closest("[data-realm]");
+  if (pick && pick.dataset.realm !== REALM) openRealm(pick.dataset.realm);
+  else if (pick && PAGE === "realms") location.hash = "#world";
+});
+function renderRealmChip() {
+  const chip = document.getElementById("realmChip");
+  if (!chip) return;
+  const realm = (REALMS || []).find(r => r.key === REALM);
+  chip.hidden = !REALMS || REALMS.length < 2 || PAGE === "realms";
+  chip.className = "realm-chip mode-" + (realm ? realm.mode : REALM);
+  chip.textContent = realmName(realm);
+}
+
+function sparkline(values, color) {
+  const points = values.map((v, i) => [i, v]).filter(p => p[1] !== null && p[1] !== undefined);
+  if (points.length < 2) return "";
+  const max = Math.max.apply(null, points.map(p => p[1]).concat([1]));
+  const width = 220, height = 44, last = values.length - 1 || 1;
+  const path = points.map((p, i) => (i ? "L" : "M") + (p[0] / last * width).toFixed(1) + " " +
+    (height - 3 - p[1] / max * (height - 8)).toFixed(1)).join(" ");
+  return '<svg class="spark" viewBox="0 0 ' + width + " " + height + '" preserveAspectRatio="none" aria-hidden="true">' +
+    '<path d="' + path + " L" + width + " " + height + " L0 " + height + ' Z" fill="' + color + '" opacity=".12"/>' +
+    '<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>';
+}
+const tickClass = tick => (tick == null ? "" : tick < 100 ? "good" : tick < 200 ? "warn" : "bad");
+
+function renderRealms() {
+  const host = document.getElementById("realmsBoard");
+  if (!host || !REALMS) return;
+  const total = { bots: 0, players: 0, ram: 0, up: 0 };
+  const cards = REALMS.map(realm => {
+    const state = realmStateOf(realm), live = realm.state || {}, counts = realm.counts || {};
+    const bots = PUBLIC ? realm.bots : live.bots != null ? live.bots : counts.botsOnline;
+    const players = PUBLIC ? realm.players : live.players != null ? live.players : counts.playersOnline;
+    total.bots += bots || 0; total.players += players || 0; total.ram += live.ramMo || 0;
+    if (state === "running") total.up++;
+    const tick = live.tickMean != null ? live.tickMean : live.tick;
+    const tiles = [[W.realmBots, bots == null ? "–" : num(bots), counts.bots != null ? W.realmTotalBots(num(counts.bots)) : ""],
+      [W.realmPlayers, players == null ? "–" : num(players), ""]];
+    if (!PUBLIC) {
+      tiles.push([W.realmLevel, counts.avgLevel ? one(counts.avgLevel) : "–", counts.maxLevel ? "max " + counts.maxLevel : ""],
+        [W.realmTick, tick == null ? "–" : num(tick) + " ms", "", tickClass(tick)],
+        [W.realmRam, live.ramMo == null ? "–" : one(live.ramMo / 1024) + " Go".replace("Go", lang === "fr" ? "Go" : "GB"), ""],
+        [W.realmCrashes, num(realm.crashes || 0), "", realm.crashes ? "bad" : ""]);
+    }
+    const spark = PUBLIC ? "" : sparkline((realm.spark || []).map(p => p.bots), "var(--realm)");
+    return '<article class="realm-card mode-' + esc(realm.mode) + " " + state + (realm.key === REALM ? " current" : "") +
+      '" data-realm="' + esc(realm.key) + '" tabindex="0">' +
+      '<header><span class="gem big" aria-hidden="true"></span><div><h3>' + esc(realm.name) + "</h3>" +
+      '<span class="meta">' + esc(W.realmModes[realm.mode] || realm.mode) + (live.uptime ? " · " + esc(W.realmUptime + live.uptime) : "") + "</span></div>" +
+      '<span class="state-badge ' + state + '">' + esc(W.realmState[state]) + "</span></header>" +
+      '<div class="realm-tiles">' + tiles.map(t => '<div class="rt ' + (t[3] || "") + '"><span class="label">' + esc(t[0]) +
+        '</span><b class="num">' + esc(t[1]) + "</b>" + (t[2] ? '<span class="meta">' + esc(t[2]) + "</span>" : "") + "</div>").join("") + "</div>" +
+      (spark ? '<div class="realm-spark">' + spark + '<span class="meta">' + esc(W.realmSpark) + "</span></div>" : "") +
+      (counts.error ? '<p class="meta">' + esc(W.realmNoFigures) + "</p>" : "") +
+      '<footer><span class="btn small">' + esc(realm.key === REALM ? W.realmShown : W.realmOpen) + "</span></footer></article>";
+  }).join("");
+  host.innerHTML = '<div class="figures realm-totals">' +
+    [[W.realmsTotal, total.up + " / " + REALMS.length, ""], [W.realmBots, num(total.bots), ""], [W.realmPlayers, num(total.players), ""]]
+      .concat(PUBLIC ? [] : [[W.realmRam, one(total.ram / 1024) + (lang === "fr" ? " Go" : " GB"), ""]])
+      .map(f => '<div class="figure"><div class="label">' + esc(f[0]) + '</div><div class="value num">' + esc(f[1]) + "</div></div>").join("") +
+    '</div><div class="realm-grid">' + cards + "</div>";
+}
+document.addEventListener("keydown", event => {
+  if (event.key === "Enter" && event.target.classList && event.target.classList.contains("realm-card")) {
+    openRealm(event.target.dataset.realm);
+  }
+});
 
 /* ---------------- language ---------------- */
 document.getElementById("langButton").addEventListener("click", () => {
@@ -313,6 +479,7 @@ document.getElementById("langButton").addEventListener("click", () => {
   showPage();
   if (LAST) render(LAST);
   renderFeed();
+  renderRealmSwitch();
 });
 
 /* ---------------- line chart ---------------- */
@@ -1214,7 +1381,7 @@ const LIVE_EVERY = PUBLIC ? 12000 : 5000;
 const LIVE_STALE = 90;  // seconds: older than this, the server or the dashboard has stopped
 
 async function refreshLive() {
-  let url = "live.json";
+  let url = realmFile("live.json");
   /* private:start */url = "/api/live";/* private:end */
   try {
     const answer = await fetch(url, { cache: PUBLIC ? "no-cache" : "no-store" });
@@ -1793,20 +1960,22 @@ const WHEN = {
 function settingControl(setting) {
   const id = "set_" + setting.key.replace(/[^A-Za-z0-9]/g, "_");
   const value = setting.value === null ? "" : setting.value;
+  // A realm of the launcher: what its game mode sets is shown, not changed (the launcher would put it back).
+  const locked = setting.locked ? " disabled" : "";
   if (setting.kind === "bool") {
-    return '<select id="' + id + '" data-key="' + esc(setting.key) + '">'
+    return '<select id="' + id + '" data-key="' + esc(setting.key) + '"' + locked + ">"
       + '<option value="1"' + (value === "1" ? " selected" : "") + ">On</option>"
       + '<option value="0"' + (value === "0" ? " selected" : "") + ">Off</option></select>";
   }
   if (setting.kind === "choice") {
-    return '<select id="' + id + '" data-key="' + esc(setting.key) + '">'
+    return '<select id="' + id + '" data-key="' + esc(setting.key) + '"' + locked + ">"
       + (setting.choices || []).map(c =>
         '<option value="' + esc(c) + '"' + (value === c ? " selected" : "") + ">"
         + esc(setting.labels && setting.labels[c] ? setting.labels[c] : c === "0" ? "0 (per-level curve)" : "x" + c)
         + "</option>").join("")
       + "</select>";
   }
-  return '<input id="' + id + '" data-key="' + esc(setting.key) + '" value="' + esc(value) + '">';
+  return '<input id="' + id + '" data-key="' + esc(setting.key) + '" value="' + esc(value) + '"' + locked + ">";
 }
 
 // The values on screen: saved ones, overlaid with anything edited but not applied.
@@ -2033,10 +2202,13 @@ function renderOffline(data) {
 }
 
 async function refresh() {
+  // A tab in the background asks nothing: the figures are read again the moment it is shown.
+  if (document.hidden && LAST) return;
+  loadRealms();
   await loadWorld();
   await refreshLive();
   try {
-    const answer = await fetch(API + (PUBLIC ? "?t=" + Date.now() : ""), { cache: "no-store" });
+    const answer = await fetch(realmFile(API) + (PUBLIC ? "?t=" + Date.now() : ""), { cache: "no-store" });
     const data = await answer.json();
     if (data && data.error) { renderOffline(data); return; }
     document.getElementById("offlineBanner").hidden = true;
@@ -2055,5 +2227,6 @@ setInterval(refresh, 20000);
 setInterval(refreshLiveMap, LIVE_EVERY);
 window.addEventListener("hashchange", refreshLiveMap);
 document.addEventListener("visibilitychange", refreshLiveMap);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 // The chat feed follows the log only while its page is open.
 /* private:start */setInterval(() => { if (PAGE === "chat" && !document.hidden) loadFeed(); }, 5000);/* private:end */

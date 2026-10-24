@@ -53,6 +53,36 @@ English and French. Dark theme. The Cinzel font is bundled under the SIL Open Fo
 
 <br clear="right">
 
+## Several realms: CoA, Wildcard, Reborn
+
+A server set up by the CoA launcher can run the Wildcard (Darkmoon) and Warcraft Reborn (Bronzebeard) realms beside
+the CoA one, each in `<repack>\Royaumes\<key>` with its own characters, bots, journals and settings. The dashboard
+finds them on its own and only reads that folder. A realm picker appears in the side bar (each realm in the
+launcher's colour); every page then shows the realm picked, and the **Realms** page shows all of them side by side.
+`http://localhost:8088/?realm=wildcard` opens a realm directly. Without a Royaumes folder nothing changes.
+
+The Settings page of a Wildcard or Reborn realm writes `Royaumes\<key>\settings.json`, the file the launcher builds
+that realm's settings from at every start; what the realm's game mode sets (classes, bot account prefix, ports) is
+shown greyed.
+
+## Server health, auction house, game master (private version only)
+
+**Server** — the realm's worldserver now and over 24 hours or 7 days: its tick (the time the world takes for one
+update; under 100 ms is smooth), players and bots online, memory, processor, crash reports, its starts and stops, and
+plain advice when something is off. One reading a minute: process figures straight from Windows and one
+`server info` on the realm's console, never the database. `"monitorEvery": 0` turns it off, `"console": false`
+leaves the console alone.
+
+**Auction house** — the auctions by house, by seller (the auction house bot, random bots, players), by quality and by
+kind of item, the most expensive ones and the week's curve; and the auction house bot's commands: run a cycle,
+reload `mod_ahbot.conf`, take its auctions down.
+
+**Game master** — for whoever runs the server from this PC: a message to every player (chat or on screen), save every
+character, and for a player of the list kick, revive, unstuck, mute, set the level, send gold or an item, ban or
+unban the account and set its GM level. Each action is the server's own command, sent to the realm's console with
+the repack's console account (`Settings\repack.json`), checked before it leaves, and kept with its answer in
+`data\gm-actions.jsonl`. It answers on 127.0.0.1 only and only to this page; `"gmTools": false` removes it.
+
 ## Install
 
 Needs Python 3.9 or later and the `mysql` client binary.

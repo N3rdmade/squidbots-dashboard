@@ -67,6 +67,7 @@ import sys
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import botconfig
+from webapp import gm, market, monitor, procinfo, realms
 
 
 def find_config_dir():
@@ -91,12 +92,9 @@ for _name in DB.values():
     if not re.match(r"^[A-Za-z0-9_]+$", _name):
         raise SystemExit("dashboard.json: %r is not a database name" % _name)
 CACHE_SECONDS = 20
-HISTORY_FILE = os.path.join(HERE, "history.json")
 HISTORY_EVERY = 10 * 60        # one point every 10 minutes
 HISTORY_KEEP = 7 * 24 * 3600   # a week of points
 # Experience of every bot, once an hour, to work out who gains the most over a day.
-XP_FILE = os.path.join(HERE, "xp-history.json")
-LEVELS_FILE = os.path.join(HERE, "levels.json")
 XP_EVERY = 3600
 XP_KEEP = 25 * 3600
 # Optional public copy: a folder a web server serves, on a NAS or anywhere else. The dashboard only
@@ -122,18 +120,19 @@ COUNT_RE = re.compile(r"([a-z ]+?) (\d+)/(\d+)")
 SPELL_RE = re.compile(r"\s*([^,]+?) \((\d+)\) x(\d+)")  # entries are separated by ", "
 
 
-def action_usage(hours=24):
+def action_usage(hours=24, path=None):
     """Casts and tries of each bot action over the last `hours`, from CoaBots.log.
 
     Counts in the log restart at every worldserver start: the gain between two reports of the
     same run is added up, and a report whose counts went down starts a new run.
     """
-    if not os.path.exists(COA_LOG):
+    path = path or COA_LOG
+    if not os.path.exists(path):
         return None
     since = time.time() - hours * 3600
     totals, previous, first = {}, None, None
     runs, spells = [], {}
-    for raw in open(COA_LOG, encoding="utf-8", errors="replace"):
+    for raw in open(path, encoding="utf-8", errors="replace"):
         line = raw.strip()
         match = USAGE_RE.match(line)
         if match:
@@ -175,7 +174,7 @@ def action_usage(hours=24):
         "dispels": top("dispel"),
     }
 
-def chat_stats(hours=24, limit=12, bots=None):
+def chat_stats(hours=24, limit=12, bots=None, path=None):
     """Who talked and how much over the last `hours`, from Chat.log.
 
     With `bots` (a set of bot names), "bots" holds the same tally restricted to lines those bots said:
@@ -184,12 +183,13 @@ def chat_stats(hours=24, limit=12, bots=None):
     Lines look like "Player Name says (language 0): ..." or "Player Name tells channel Zone: ...".
     A line with no date is kept: the appender writes one, and an old file simply reads as recent.
     """
-    if not os.path.exists(CHAT_LOG):
+    path = path or CHAT_LOG
+    if not os.path.exists(path):
         return None
     since = time.time() - hours * 3600
     tallies = {"all": ({}, {}), "bots": ({}, {})}
     first = None
-    with open(CHAT_LOG, "rb") as handle:
+    with open(path, "rb") as handle:
         handle.seek(0, os.SEEK_END)
         handle.seek(max(0, handle.tell() - CHAT_TAIL))
         raw = handle.read().decode("utf-8", "replace")
@@ -376,13 +376,14 @@ LOOT_RE = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\s+(.+?) \(class (\d+) l
                      r"(.+?) \((\d+)\) quality (\d+) ilvl (\d+) x(\d+)$")
 
 
-def loot_feed(limit=12, hours=48):
+def loot_feed(limit=12, hours=48, path=None):
     """The last epic (or better) items the bots brought back, most recent first."""
-    if not os.path.exists(LOOT_LOG):
+    path = path or LOOT_LOG
+    if not os.path.exists(path):
         return None
     since = time.time() - hours * 3600
     found = []
-    with open(LOOT_LOG, "rb") as handle:
+    with open(path, "rb") as handle:
         handle.seek(0, os.SEEK_END)
         handle.seek(max(0, handle.tell() - 2 * 1024 * 1024))
         raw = handle.read().decode("utf-8", "replace")
@@ -407,34 +408,30 @@ STATUS_FILE = SETTINGS.get("botStatusFile") or os.path.join(os.path.dirname(COA_
 STATUS_STALE = 60   # seconds; older than this the server has stopped writing it
 
 
-# The last snapshot read: (mtime_ns, size), its "at", and its bots already encoded, so the file is
-# parsed once per snapshot however many pages ask for it.
-_LIVE_CACHE = {"key": None, "at": 0, "parsed": [], "bots": b"[]"}
-_LIVE_LOCK = threading.Lock()
-
-
 def _answer(payload):
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
 
-def load_live():
-    """(at, bots, bots encoded) of the current snapshot, or, when there is none to show, the answer
+def load_live(ctx):
+    """(at, bots, bots encoded) of the realm's current snapshot, or, when there is none to show, the answer
     saying why: {"bots": [], "absent": true} on a realm with no such module (the usual case: nothing
-    in the repack writes it), {"bots": [], "missing": reason} when the file is unreadable."""
+    in the repack writes it), {"bots": [], "missing": reason} when the file is unreadable.
+    The last snapshot read is kept by (mtime_ns, size), so the file is parsed once however many pages ask."""
     try:
-        stat = os.stat(STATUS_FILE)
+        stat = os.stat(ctx.status_file)
     except FileNotFoundError:
         return {"bots": [], "absent": True}
     except OSError as error:
         return {"bots": [], "missing": "status file unreadable: %s" % error}
     key = (stat.st_mtime_ns, stat.st_size)
-    with _LIVE_LOCK:
-        if _LIVE_CACHE["key"] != key:
+    cache = ctx.live_cache
+    with ctx.live_lock:
+        if cache["key"] != key:
             # The writer renames a new copy over the file; on Windows an open that lands during that
             # swap is refused, so a refused open is tried again a moment later before the card says so.
             for attempt in range(3):
                 try:
-                    with open(STATUS_FILE, "rb") as handle:
+                    with open(ctx.status_file, "rb") as handle:
                         data = json.loads(handle.read().decode("utf-8", errors="replace"))
                     break
                 except PermissionError as error:
@@ -444,28 +441,35 @@ def load_live():
                 except (OSError, ValueError) as error:
                     return {"bots": [], "missing": "status file unreadable: %s" % error}
             bots = data.get("bots") or []
-            _LIVE_CACHE.update(key=key, at=data.get("at") or 0, parsed=bots, bots=_answer(bots))
-        return _LIVE_CACHE["at"], _LIVE_CACHE["parsed"], _LIVE_CACHE["bots"]
+            cache.update(key=key, at=data.get("at") or 0, parsed=bots, bots=_answer(bots))
+        return cache["at"], cache["parsed"], cache["bots"]
+
+
+def live_count(ctx):
+    """Bots in the realm's live snapshot, or None when there is no fresh one."""
+    live = load_live(ctx)
+    if isinstance(live, dict) or time.time() - float(live[0] or 0) > STATUS_STALE:
+        return None
+    return len(live[1])
 
 
 # Creatures killed: the core keeps no achievement progress for bots (criteria 5529 stays empty), so the
 # module counts each bot's killing blows since the server started ("k" in bot-status.json). That count
 # starts again at every restart; kills.json keeps the running total per bot across restarts.
-KILLS_FILE = os.path.join(HERE, "kills.json")
-
-
 class KillTally:
-    def __init__(self):
+    def __init__(self, ctx):
+        self.ctx = ctx
+        self.path = ctx.file("kills.json")
         self.lock = threading.Lock()
         self.saved = 0.0
         try:
-            self.bots = json.load(open(KILLS_FILE, encoding="utf-8")).get("bots", {})
+            self.bots = json.load(open(self.path, encoding="utf-8")).get("bots", {})
         except (OSError, ValueError):
             self.bots = {}
 
     def update(self):
         """{name: kills} after reading the latest snapshot."""
-        live = load_live()
+        live = load_live(self.ctx)
         with self.lock:
             if not isinstance(live, dict):
                 for bot in live[1]:
@@ -477,18 +481,15 @@ class KillTally:
                     total += count - last if count >= last else count
                     self.bots[bot.get("n")] = (count, total)
                 if time.time() - self.saved > 60:
-                    write_atomic(KILLS_FILE, json.dumps({"bots": self.bots}, separators=(",", ":")).encode("utf-8"))
+                    write_atomic(self.path, json.dumps({"bots": self.bots}, separators=(",", ":")).encode("utf-8"))
                     self.saved = time.time()
             return {name: total for name, (_last, total) in self.bots.items()}
 
 
-KILLS = KillTally()
-
-
-def live_status_body():
+def live_status_body(ctx):
     """The /api/live answer, as JSON bytes: {"at", "age", "bots"} from the module's snapshot, or
     load_live()'s reason, or {"bots": [], "missing": reason} when the snapshot is stale."""
-    live = load_live()
+    live = load_live(ctx)
     if isinstance(live, dict):
         return _answer(live)
     at, _parsed, bots = live
@@ -504,16 +505,16 @@ def live_status_body():
 LIVE_PUBLISH_EVERY = 12
 PUBLIC_LIVE_FIELDS = ("n", "l", "hp", "pt", "pw", "m", "x", "y", "zone", "combat", "dead", "grp", "lead",
                       "task", "quests")
-_PLAYERS = {"at": 0.0, "names": set()}
 
 
-def real_player_names():
-    """Names of the characters that are not bots, read again every five minutes."""
-    if time.time() - _PLAYERS["at"] > 300:
+def real_player_names(ctx):
+    """Names of the realm's characters that are not bots, read again every five minutes."""
+    players = ctx.players
+    if time.time() - players["at"] > 300:
         rows = mysql("SELECT c.name FROM {characters}.characters c JOIN {auth}.account a ON a.id = c.account "
-                     "WHERE a.username NOT LIKE 'RNDBOT%'".format(**DB))
-        _PLAYERS.update(at=time.time(), names={row[0] for row in rows})
-    return _PLAYERS["names"]
+                     "WHERE a.username NOT LIKE '{bots}'".format(bots=ctx.bot_like, **ctx.db))
+        players.update(at=time.time(), names={row[0] for row in rows})
+    return players["names"]
 
 
 def public_live(bots, players):
@@ -529,15 +530,15 @@ def public_live(bots, players):
     return out
 
 
-def public_live_body():
-    live = load_live()
+def public_live_body(ctx):
+    live = load_live(ctx)
     if isinstance(live, dict):
         body = {"at": 0, "bots": [], "absent": True} if live.get("absent") else {"at": 0, "bots": []}
     else:
         at, bots, _encoded = live
         age = max(0, round(time.time() - float(at)))
         body = {"at": int(at), "age": age,
-                "bots": [] if age > STATUS_STALE else public_live(bots, real_player_names())}
+                "bots": [] if age > STATUS_STALE else public_live(bots, real_player_names(ctx))}
     return json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
@@ -545,7 +546,10 @@ def live_publish_loop():
     last_error = None
     while True:
         try:
-            write_atomic(os.path.join(PUBLISH_DIR, "live.json"), public_live_body())
+            for ctx in CONTEXTS:
+                if ctx.realm.disabled:
+                    continue
+                write_atomic(os.path.join(PUBLISH_DIR, ctx.public_name("live.json")), public_live_body(ctx))
             last_error = None
         except Exception as error:  # the NAS may be asleep: said once, tried again
             if str(error) != last_error:
@@ -639,71 +643,81 @@ def role_of(spec):
     return "heal" if spec in HEAL else "tank" if spec in TANK else "dps"
 
 
-def server_state():
+def server_state(ctx):
+    """Is the realm's worldserver running, its memory, and its crashes over the last day (or since countFrom).
+    The monitor (webapp/monitor.py) follows each realm's own worldserver process: every realm runs the same
+    worldserver.exe, so looking for that name alone no longer says which realm is up."""
     state = {"running": False, "ramMo": None, "crashes24h": 0, "lastCrash": None}
-    try:
-        if SETTINGS.get("worldserverPath"):
-            # Several worldservers run on this PC: follow the one at that path.
-            out = subprocess.run([POWERSHELL, "-NoProfile", "-Command",
-                                  "Get-Process worldserver -ErrorAction SilentlyContinue | Where-Object Path -eq '%s' | "
-                                  "ForEach-Object { [int]($_.WorkingSet64 / 1MB) }" % SETTINGS["worldserverPath"]],
-                                 capture_output=True, text=True, timeout=15).stdout.split()
-            if out:
-                state["running"], state["ramMo"] = True, int(out[0])
-            raise StopIteration
-        out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq worldserver.exe", "/FO", "CSV", "/NH"],
-                             capture_output=True, text=True, timeout=10).stdout
-        for line in out.splitlines():
-            if line.lower().startswith('"worldserver.exe"'):
-                state["running"] = True
-                memory = line.rsplit('","', 1)[-1]
-                digits = re.sub(r"\D", "", memory)
-                if digits:
-                    state["ramMo"] = int(digits) // 1024
-    except (OSError, subprocess.SubprocessError, StopIteration, ValueError):
-        pass
-    since = COUNT_FROM or time.time() - 24 * 3600
-    # The worldserver writes crash reports under the folder it runs in: Core, or CoA-Bots\Core with CoA Bots.
-    folders = [SETTINGS["crashesDir"]] if SETTINGS.get("crashesDir") else [os.path.join(ROOT, "Core", "Crashes"),
-                                                                        os.path.join(ROOT, "CoA-Bots", "Core", "Crashes")]
-    crashes = [f for folder in folders
-               for f in glob.glob(os.path.join(glob.escape(folder), "*.txt")) if os.path.getmtime(f) > since]
+    now = MONITOR.state(ctx.realm.key)
+    state["running"], state["ramMo"] = bool(now.get("running")), now.get("ramMo")
+    since = (COUNT_FROM if ctx.realm.key == "coa" else None) or time.time() - 24 * 3600
+    crashes = recent_crashes(ctx.realm.crashes, since)
     state["crashes24h"] = len(crashes)
     if crashes:
-        state["lastCrash"] = datetime.datetime.fromtimestamp(max(os.path.getmtime(f) for f in crashes)).strftime("%d/%m %H:%M")
+        state["lastCrash"] = datetime.datetime.fromtimestamp(max(crashes)).strftime("%d/%m %H:%M")
     return state
 
 
+def recent_crashes(folders, since):
+    """Dates of the crash reports written after `since` in those folders."""
+    return [os.path.getmtime(f) for folder in folders
+            for f in glob.glob(os.path.join(glob.escape(folder), "*.txt")) if os.path.getmtime(f) > since]
+
+
+def _load(path, empty):
+    try:
+        return json.load(open(path, encoding="utf-8"))
+    except (OSError, ValueError):
+        return empty
+
+
+# Names shared by every realm (the world database and the DBC files are the same): read once.
+NAMES = {"specs": {}, "classes": {}, "zones": None, "xp_levels": {}}
+NAMES_LOCK = threading.Lock()
+
+
+def load_names():
+    with NAMES_LOCK:
+        if not NAMES["specs"] and os.path.exists(BUILDS):
+            # The CoA specialisations by class (shipped with CoA Bots); without it the spec columns stay empty.
+            for key, build in json.load(open(BUILDS, encoding="utf-8")).items():
+                NAMES["specs"][key] = build["spec"]
+        if not NAMES["classes"]:
+            for cls, name in mysql("SELECT class, client_name FROM %s.ascension_custom_class" % DB["world"]):
+                NAMES["classes"][int(cls)] = name
+        if NAMES["zones"] is None:
+            NAMES["zones"] = zone_names()
+        if not NAMES["xp_levels"]:
+            # Experience needed to reach each level, so that levels and experience compare as one number.
+            total, levels = 0, {}
+            for level, needed in mysql("SELECT Level, Experience FROM %s.player_xp_for_level ORDER BY Level" % DB["world"]):
+                levels[int(level)] = total
+                total += int(needed)
+            levels[max(levels) + 1] = total
+            NAMES["xp_levels"] = levels
+
+
 class Stats:
-    def __init__(self):
+    def __init__(self, ctx):
+        self.ctx = ctx
         self.lock = threading.Lock()
         self.cached_at = 0.0
         self.data = None
         self.baseline = None
-        self.level_ups = json.load(open(LEVELS_FILE, encoding="utf-8")) if os.path.exists(LEVELS_FILE) else {}
-        self.specs = {}
-        self.classes = {}
-        self.xp_levels = {}
-        self.zones = None
-        self.history = json.load(open(HISTORY_FILE, encoding="utf-8")) if os.path.exists(HISTORY_FILE) else []
-        self.xp_history = json.load(open(XP_FILE, encoding="utf-8")) if os.path.exists(XP_FILE) else []
+        self.levels_file, self.history_file = ctx.file("levels.json"), ctx.file("history.json")
+        self.xp_file, self.baseline_file = ctx.file("xp-history.json"), ctx.file("baseline.json")
+        self.level_ups = _load(self.levels_file, {})
+        self.history = _load(self.history_file, [])
+        self.xp_history = _load(self.xp_file, [])
+
+    # The shared names, under the names the code below always used.
+    specs = property(lambda self: NAMES["specs"])
+    classes = property(lambda self: {**BASE_CLASSES, **NAMES["classes"]})
+    zones = property(lambda self: NAMES["zones"])
+    xp_levels = property(lambda self: NAMES["xp_levels"])
 
     def load_names(self):
-        if not self.specs:
-            for key, build in json.load(open(BUILDS, encoding="utf-8")).items():
-                self.specs[key] = build["spec"]
-        if not self.classes:
-            for cls, name in mysql("SELECT class, client_name FROM %s.ascension_custom_class" % DB["world"]):
-                self.classes[int(cls)] = name
-        if self.zones is None:
-            self.zones = zone_names()
-        if not self.xp_levels:
-            # Experience needed to reach each level, so that levels and experience compare as one number.
-            total = 0
-            for level, needed in mysql("SELECT Level, Experience FROM %s.player_xp_for_level ORDER BY Level" % DB["world"]):
-                self.xp_levels[int(level)] = total
-                total += int(needed)
-            self.xp_levels[max(self.xp_levels) + 1] = total
+        load_names()
 
     def get(self):
         with self.lock:
@@ -719,6 +733,8 @@ class Stats:
 
     def collect(self):
         self.load_names()
+        ctx, db = self.ctx, self.ctx.db
+        class_names = self.classes
         rows = mysql(
             "SELECT c.name, c.class, c.level, c.xp, c.online, TRIM(IFNULL(s.data, '0')), IFNULL(k.counter, 0), "
             "IFNULL(q.n, 0), c.totaltime, c.race, c.money, c.health, c.zone, "
@@ -728,14 +744,14 @@ class Stats:
             "LEFT JOIN {characters}.character_achievement_progress k ON k.guid = c.guid AND k.criteria = 5529 "
             "LEFT JOIN (SELECT guid, COUNT(*) n FROM {characters}.character_queststatus_rewarded GROUP BY guid) q "
             "ON q.guid = c.guid "
-            "WHERE a.username LIKE 'RNDBOT%'".format(**DB))
+            "WHERE a.username LIKE '{bots}'".format(bots=ctx.bot_like, **db))
         bots = []
-        counted = KILLS.update()
+        counted = ctx.kills.update()
         for (name, cls, level, xp, online, spec, kills, quests, totaltime, race, money, health,
              zone, cmap, pos_x, pos_y) in rows:
             cls, spec, level, xp = int(cls), int(spec or 0), int(level), int(xp)
             bots.append({
-                "name": name, "cls": self.classes.get(cls, str(cls)), "level": level, "xp": xp,
+                "name": name, "cls": class_names.get(cls, str(cls)), "level": level, "xp": xp,
                 "online": online == "1", "spec": self.specs.get("%d:%d" % (cls, spec), "") if spec else "",
                 "role": role_of(spec), "kills": max(int(kills), counted.get(name, 0)), "quests": int(quests), "hours": int(totaltime) / 3600.0,
                 "faction": "alliance" if int(race) in ALLIANCE_RACES else "horde",
@@ -759,7 +775,7 @@ class Stats:
         }
         # Starting point of the "gains since" figures, kept on disk so restarting the dashboard does not reset it.
         # Delete baseline.json to start a new session.
-        baseline_file = os.path.join(HERE, "baseline.json")
+        baseline_file = self.baseline_file
         if self.baseline is None and os.path.exists(baseline_file):
             self.baseline = json.load(open(baseline_file, encoding="utf-8"))
         if self.baseline is None:
@@ -774,16 +790,20 @@ class Stats:
             "quests": totals["quests"] - self.baseline["quests"],
             "levels": sum(b["level"] for b in bots) - self.baseline["levels"],
         }
-        if COUNT_FROM:
+        count_from = COUNT_FROM if ctx.realm.key == "coa" else None
+        if count_from:
             # Test run: the big figures are the gains since the baseline, not the bots' whole lives.
             totals["kills"], totals["quests"] = session["kills"], session["quests"]
 
         # Hours the worldserver ran since the 1000-bot setup, from AzerothCore's own uptime table. The
         # table is written every 10 minutes: the running start is counted up to now instead.
-        starts = mysql("SELECT starttime, uptime FROM %s.uptime "
-                       "WHERE starttime >= UNIX_TIMESTAMP('%s') ORDER BY starttime" % (DB["auth"], UPTIME_SINCE))
+        # One table for every realm of the auth database: this realm's rows only.
+        since = UPTIME_SINCE if ctx.realm.key == "coa" else "2000-01-01 00:00:00"
+        starts = mysql("SELECT starttime, uptime FROM %s.uptime WHERE realmid = %d "
+                       "AND starttime >= UNIX_TIMESTAMP('%s') ORDER BY starttime" % (db["auth"], ctx.realm.id, since))
         uptime_seconds = sum(int(up) for _, up in starts)
-        if starts and server_state()["running"]:
+        server = server_state(ctx)
+        if starts and server["running"]:
             started, recorded = int(starts[-1][0]), int(starts[-1][1])
             uptime_seconds += max(0, int(time.time()) - started - recorded)
         uptime = {"hours": round(uptime_seconds / 3600.0, 1)}
@@ -802,7 +822,7 @@ class Stats:
                 self.level_ups["gained"] += b["level"] - before
                 self.level_ups["total"] = self.level_ups.get("total", 0) + b["level"] - before
             last[b["name"]] = b["level"]
-        json.dump(self.level_ups, open(LEVELS_FILE, "w", encoding="utf-8"))
+        json.dump(self.level_ups, open(self.levels_file, "w", encoding="utf-8"))
         session["levels"] = self.level_ups["gained"]
         session["levelHours"] = round((time.time() - server_start) / 3600.0, 3) if server_start else 0
 
@@ -815,13 +835,13 @@ class Stats:
                                  "online": totals["online"],
                                  "dead": sum(1 for b in online if b["dead"])})
             self.history = [p for p in self.history if now - p["ts"] <= HISTORY_KEEP]
-            json.dump(self.history, open(HISTORY_FILE, "w", encoding="utf-8"))
+            json.dump(self.history, open(self.history_file, "w", encoding="utf-8"))
 
         # Experience of every bot once an hour: the gain over the last day is what the ranking uses.
         if not self.xp_history or now - self.xp_history[-1]["ts"] >= XP_EVERY:
             self.xp_history.append({"ts": round(now), "xp": {b["name"]: b["totalXp"] for b in bots}})
             self.xp_history = [p for p in self.xp_history if now - p["ts"] <= XP_KEEP]
-            json.dump(self.xp_history, open(XP_FILE, "w", encoding="utf-8"))
+            json.dump(self.xp_history, open(self.xp_file, "w", encoding="utf-8"))
 
         gains, stuck, oldest = [], None, self.xp_history[0] if self.xp_history else None
         if oldest and now - oldest["ts"] >= 600:      # under ten minutes the rate means nothing yet
@@ -890,7 +910,7 @@ class Stats:
                 specs[k] = specs.get(k, 0) + 1
 
         build = None
-        if os.path.exists(BUILD_FILE):
+        if ctx.realm.key == "coa" and os.path.exists(BUILD_FILE):
             try:
                 build = json.load(open(BUILD_FILE, encoding="utf-8-sig"))
             except (OSError, ValueError):
@@ -900,12 +920,13 @@ class Stats:
             "build": build,
             "generatedAt": datetime.datetime.now().strftime("%H:%M:%S"),
             "generatedTs": round(time.time()),
-            "server": server_state(),
+            "realm": ctx.realm.public(),
+            "server": server,
             "totals": totals,
             "session": session,
             "uptime": uptime,
             "history": self.history,
-            "actions": action_usage((time.time() - COUNT_FROM) / 3600.0) if COUNT_FROM else action_usage(),
+            "actions": action_usage((time.time() - count_from) / 3600.0 if count_from else 24, ctx.coa_log),
             "top": {
                 "xp": top(lambda b: (b["level"], b["xp"])),
                 "kills": top(lambda b: b["kills"]),
@@ -920,13 +941,13 @@ class Stats:
                                 for f in ("alliance", "horde")},
             },
             "xpRate": {"hours": round((now - oldest["ts"]) / 3600.0, 1) if oldest else 0, "top": gains[:10]},
-            "chat": chat_stats(bots={b["name"] for b in bots}),
+            "chat": chat_stats(bots={b["name"] for b in bots}, path=ctx.chat_log),
             "watch": {
                 "deadNow": sum(1 for b in online if b["dead"]),
                 "stuck": None if stuck is None else len(stuck),
                 "stuckNames": None if stuck is None else [b["name"] for b in sorted(
                     stuck, key=lambda b: b["level"])[:8]],
-                "incidents": incidents(),
+                "incidents": incidents() if ctx.realm.key == "coa" else None,
             },
             "zones": [{"name": self.zones.get(zone, "Zone %d" % zone), "count": n,
                        "alliance": sum(1 for b in online if b["zone"] == zone and b["faction"] == "alliance")}
@@ -941,7 +962,7 @@ class Stats:
                       "f": b["faction"], "z": self.zones.get(b["zone"], ""), "h": round(b["hours"], 1),
                       "m": b["map"], "x": round(b["x"], 1), "y": round(b["y"], 1), "d": b["dead"]}
                      for b in bots],
-            "loot": loot_feed(),
+            "loot": loot_feed(path=ctx.loot_log),
             "classes": classes,
             "levels": [{"level": lvl, "count": levels[lvl]} for lvl in sorted(levels)],
             "specs": [{"cls": c, "spec": s, "role": r, "count": n}
@@ -949,17 +970,15 @@ class Stats:
         }
 
 
-STATS = Stats()
-
-
 # The PvP page: battlegrounds, arenas and High Risk / War Mode, built by tools/pvp_build.py (shared with the
 # players' site). Its file names no character; a team name is kept only for a team of random bots.
-PVP_FILE = os.path.join(HERE, "pvp.json")
 PVP_EVERY = 5 * 60
 
 
 class Pvp:
-    def __init__(self):
+    def __init__(self, ctx):
+        self.ctx = ctx
+        self.path = ctx.file("pvp.json")
         self.lock = threading.Lock()
         self.built = 0
         self.body = None
@@ -972,29 +991,174 @@ class Pvp:
             return self.body
 
     def build(self):
+        ctx = self.ctx
         try:
             exe, login = mysql_login()
-            command = [sys.executable, "-B", os.path.join(HERE, "tools", "pvp_build.py"), "--out", PVP_FILE,
-                       "--mysql", exe, "--chars-db", DB["characters"], "--auth-db", DB["auth"],
+            command = [sys.executable, "-B", os.path.join(HERE, "tools", "pvp_build.py"), "--out", self.path,
+                       "--mysql", exe, "--chars-db", ctx.db["characters"], "--auth-db", ctx.db["auth"],
+                       "--realm-id", str(ctx.realm.id), "--bot-prefix", ctx.realm.prefix.lower(),
                        # "Since" is a date of the server's own (a release, say): without one, the whole history.
-                       "--depuis", SETTINGS.get("pvpSince") or "", "--plancher", ""]
+                       "--depuis", (SETTINGS.get("pvpSince") if ctx.realm.key == "coa" else "") or "", "--plancher", ""]
             command += ["--mysql-opt=" + option for option in login]
-            if SETTINGS.get("pvpSinceTitle"):
+            if SETTINGS.get("pvpSinceTitle") and ctx.realm.key == "coa":
                 command += ["--depuis-titre", SETTINGS["pvpSinceTitle"]]
-            conf = os.path.join(CONFIG_DIR or "", "playerbots.conf")
-            if CONFIG_DIR and os.path.exists(conf):
+            conf = os.path.join(ctx.config_dir or "", "playerbots.conf")
+            if ctx.config_dir and os.path.exists(conf):
                 command += ["--playerbots-conf", conf]
             out = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                                 encoding="utf-8", errors="replace", timeout=300)
+                                 encoding="utf-8", errors="replace", timeout=300,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             if out.returncode:
                 lines = (out.stderr or out.stdout).strip().splitlines()
                 raise RuntimeError(lines[-1] if lines else "pvp_build.py: code %d" % out.returncode)
-            return open(PVP_FILE, "rb").read()
+            return open(self.path, "rb").read()
         except Exception as error:
             return json.dumps({"error": str(error)}).encode("utf-8")
 
 
-PVP = Pvp()
+# ---------------------------------------------------------------- realms
+# Classes of the original game: the world database names only CoA's own classes (12 and up). Class 10 is the
+# Wildcard realm's Hero.
+BASE_CLASSES = {1: "Warrior", 2: "Paladin", 3: "Hunter", 4: "Rogue", 5: "Priest", 6: "Death Knight", 7: "Shaman",
+                8: "Mage", 9: "Warlock", 10: "Hero", 11: "Druid"}
+
+
+def _repack_settings():
+    try:
+        return json.load(open(os.path.join(ROOT, "Settings", "repack.json"), encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return {}
+
+
+def coa_realm():
+    """The CoA realm as dashboard.json (or the repack) describes it: the dashboard of every version before 2.8."""
+    repack = _repack_settings()
+    crashes = [SETTINGS["crashesDir"]] if SETTINGS.get("crashesDir") else [os.path.join(ROOT, "Core", "Crashes"),
+                                                                          os.path.join(ROOT, "CoA-Bots", "Core", "Crashes")]
+    prefix = realms.conf_value(os.path.join(CONFIG_DIR or "", "playerbots.conf"), "AiPlayerbot.RandomBotAccountPrefix")
+    world_port = 0 if SETTINGS.get("worldserverPath") else int(SETTINGS.get("worldPort") or repack.get("worldPort") or 0)
+    return realms.Realm("coa", SETTINGS.get("realmId") or 1, SETTINGS.get("realmName") or "Conquest of Azeroth", DB,
+                        logs=os.path.dirname(COA_LOG), config_dir=CONFIG_DIR, crashes=crashes, files=HERE,
+                        prefix=prefix or "rndbot", world_port=world_port,
+                        ra_port=int(SETTINGS.get("raPort") or repack.get("raPort") or 0),
+                        pid_file=None if SETTINGS.get("worldserverPath") else os.path.join(ROOT, ".state", "world.json"),
+                        here=HERE)
+
+
+class Context:
+    """One realm and everything the dashboard keeps for it: its journals, its live snapshot, its figures."""
+
+    def __init__(self, realm):
+        self.realm = realm
+        self.db = realm.db
+        self.bot_like = realm.bot_like
+        coa = realm.key == "coa"
+        logs = realm.logs
+        self.coa_log = COA_LOG if coa else os.path.join(logs, "CoaBots.log")
+        self.chat_log = CHAT_LOG if coa else os.path.join(logs, "Chat.log")
+        self.loot_log = LOOT_LOG if coa else os.path.join(logs, "BotLoot.log")
+        self.status_file = STATUS_FILE if coa else os.path.join(logs, "bot-status.json")
+        self.config_dir = realm.config_dir
+        self.live_cache = {"key": None, "at": 0, "parsed": [], "bots": b"[]"}
+        self.live_lock = threading.Lock()
+        self.players = {"at": 0.0, "names": set()}
+        self.kills = KillTally(self)
+        self.stats = Stats(self)
+        self.pvp = Pvp(self)
+        self.market = market.Market(mysql, self)
+        self._armory = None
+        self.armory_error = None
+
+    def file(self, name):
+        return self.realm.file(name)
+
+    def public_name(self, name):
+        """stats.json for the CoA realm (as before), stats-wildcard.json for the others."""
+        if self.realm.key == "coa":
+            return name
+        stem, dot, ext = name.rpartition(".")
+        return "%s-%s.%s" % (stem, self.realm.key, ext)
+
+    @property
+    def armory(self):
+        if self._armory is None and self.armory_error is None:
+            try:
+                from webapp.armory import Armory
+                self._armory = Armory(mysql, self.db, _armory_names, DBC_DIR, os.path.join(HERE, "icons"), guess_client(),
+                                      web_icons=SETTINGS.get("webIcons", True) is not False, bot_accounts=self.bot_like)
+            except Exception as error:  # noqa: BLE001  the dashboard runs without its armory
+                self.armory_error = "%s: %s" % (type(error).__name__, error)
+        return self._armory
+
+
+REALMS = realms.discover(ROOT, SETTINGS, HERE, coa_realm())
+CONTEXTS = []          # filled below, once every class they use is defined
+BY_KEY = {}
+
+
+def context(key):
+    return BY_KEY.get(key) or CONTEXTS[0]
+
+
+MONITOR = monitor.Monitor(REALMS, ROOT, lambda key: live_count(context(key)),
+                          every=int(SETTINGS.get("monitorEvery", 60)), coa_exe=SETTINGS.get("worldserverPath"),
+                          use_ra=SETTINGS.get("console", True) is not False)
+GM = gm.Gm(ROOT, mysql, os.path.join(HERE, "data", "gm-actions.jsonl"))
+GM_ENABLED = SETTINGS.get("gmTools", True) is not False and SETTINGS.get("console", True) is not False
+
+
+SUMMARY_EVERY = 60
+
+
+def summary(ctx):
+    """A realm's counts in one light query, kept a minute: what the realms page shows for every realm at once
+    (the full figures of a realm are only worked out for the realm being looked at)."""
+    cached = getattr(ctx, "_summary", None)
+    if cached and time.time() - cached[0] < SUMMARY_EVERY:
+        return cached[1]
+    db, bots = ctx.db, ctx.bot_like
+    is_bot = "a.username LIKE '%s'" % bots
+    player = "(a.username NOT LIKE '%s' AND a.username NOT LIKE 'AHBOT%%')" % bots
+    try:
+        row = mysql(
+            "SELECT SUM({b}), SUM({b} AND c.online), ROUND(AVG(IF({b} AND c.online, c.level, NULL)), 1), "
+            "MAX(IF({b}, c.level, NULL)), SUM({p}), SUM({p} AND c.online), "
+            "SUM({b} AND c.online AND c.race IN (1, 3, 4, 7, 11)), SUM({b} AND c.online AND c.health = 0) "
+            "FROM {c}.characters c JOIN {a}.account a ON a.id = c.account".format(
+                b=is_bot, p=player, c=db["characters"], a=db["auth"]))[0]
+        n = lambda v: int(float(v)) if v not in (None, "", "NULL") else 0  # noqa: E731
+        out = {"bots": n(row[0]), "botsOnline": n(row[1]), "avgLevel": float(row[2]) if row[2] not in ("", "NULL") else None,
+               "maxLevel": n(row[3]), "players": n(row[4]), "playersOnline": n(row[5]),
+               "alliance": n(row[6]), "horde": n(row[1]) - n(row[6]), "dead": n(row[7])}
+    except Exception as error:  # noqa: BLE001
+        out = {"error": (str(error).splitlines() or [""])[0][:200]}
+    ctx._summary = (time.time(), out)
+    return out
+
+
+def realms_overview():
+    """GET /api/realms: every realm, its state now, and its figures when they were already read."""
+    out = []
+    for ctx in CONTEXTS:
+        state = MONITOR.state(ctx.realm.key)
+        points = MONITOR.series(ctx.realm.key).get("points", [])
+        out.append(dict(ctx.realm.public(), state=state, worldPort=ctx.realm.world_port, counts=summary(ctx),
+                        crashes=server_state(ctx)["crashes24h"],
+                        spark=[{"ts": p["ts"], "bots": p.get("bots"), "tick": p.get("tick"), "ram": p.get("ram")}
+                               for p in points[-180:]]))
+    return {"realms": out, "monitorEvery": MONITOR.every, "gm": GM_ENABLED}
+
+
+def public_realms():
+    """realms.json of the public copy: names and whether each is up, nothing else."""
+    out = []
+    for ctx in CONTEXTS:
+        if ctx.realm.disabled:
+            continue
+        state = MONITOR.state(ctx.realm.key)
+        out.append(dict(ctx.realm.public(), running=bool(state.get("running")), bots=state.get("bots"),
+                        players=state.get("players")))
+    return {"realms": out}
 
 
 def write_atomic(path, body):
@@ -1007,7 +1171,7 @@ def write_atomic(path, body):
 
 # What a public copy (publishDir) may carry, key by key. A key added to the stats
 # later stays on this machine until it is listed here: the public copy is chosen, not filtered.
-PUBLIC_KEYS = ("build", "generatedAt", "generatedTs", "totals", "session", "uptime", "history", "actions",
+PUBLIC_KEYS = ("realm", "build", "generatedAt", "generatedTs", "totals", "session", "uptime", "history", "actions",
                "top", "roles", "factions", "xpRate", "zones", "compare", "footer", "classNames", "bots",
                "loot", "classes", "levels", "specs")
 
@@ -1032,7 +1196,8 @@ def public_copy(data):
 PRIVATE_JS = re.compile(r"/\* private:start \*/.*?/\* private:end \*/", re.S)
 PRIVATE_HTML = re.compile(r"<!-- private:start -->.*?<!-- private:end -->", re.S)
 # Nothing of the kind may survive into a public file; publishing stops if one does.
-PRIVATE_LEFT = re.compile(r"/api/|private:(?:start|end)|id=\"(?:settings|feedCard|artPrompt|artPanel)\"")
+PRIVATE_LEFT = re.compile(r"/api/|private:(?:start|end)|server\.js|"
+                          r"id=\"(?:settings|feedCard|artPrompt|artPanel|serverPage|marketPage|gmPage)\"")
 
 
 def public_files():
@@ -1041,7 +1206,7 @@ def public_files():
         return open(os.path.join(HERE, *parts), "rb").read()
 
     script = PRIVATE_JS.sub("", read("static", "dashboard.js").decode("utf-8"))
-    script = script.replace('const API = "/api/stats";', 'const API = "stats.json";', 1)                    .replace('const PVP_API = "/api/pvp";', 'const PVP_API = "pvp.json";', 1)                    .replace("const PUBLIC = false;", "const PUBLIC = true;", 1)
+    script = script.replace('const API = "/api/stats";', 'const API = "stats.json";', 1)                    .replace('const PVP_API = "/api/pvp";', 'const PVP_API = "pvp.json";', 1)                    .replace("const PUBLIC = false;", "const PUBLIC = true;", 1)                    .replace('const REALMS_API = "/api/realms";', 'const REALMS_API = "realms.json";', 1)
     style = read("static", "dashboard.css")
     page = PRIVATE_HTML.sub("", read("index.html").decode("utf-8"))
     # A visitor's browser keeps the old script and style otherwise: name each by its content.
@@ -1122,42 +1287,78 @@ def publish_maps():
 def publish_loop():
     while True:
         try:
-            data = STATS.get()
             os.makedirs(PUBLISH_DIR, exist_ok=True)
             publish_static()
             publish_maps()
-            write_atomic(os.path.join(PUBLISH_DIR, "stats.json"),
-                         json.dumps(public_copy(data), ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-            pvp = PVP.get()
-            if b'"error"' not in pvp[:20]:
-                write_atomic(os.path.join(PUBLISH_DIR, "pvp.json"), pvp)
+            write_atomic(os.path.join(PUBLISH_DIR, "realms.json"),
+                         json.dumps(public_realms(), ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+            for ctx in CONTEXTS:
+                if ctx.realm.disabled or (ctx.realm.key not in PUBLIC_REALMS):
+                    continue
+                write_atomic(os.path.join(PUBLISH_DIR, ctx.public_name("stats.json")),
+                             json.dumps(public_copy(ctx.stats.get()), ensure_ascii=False,
+                                        separators=(",", ":")).encode("utf-8"))
+                pvp = ctx.pvp.get()
+                if b'"error"' not in pvp[:20]:
+                    write_atomic(os.path.join(PUBLISH_DIR, ctx.public_name("pvp.json")), pvp)
         except Exception as error:  # the NAS may be asleep or unreachable: retry next minute
             print("Public copy failed:", error, flush=True)
         time.sleep(PUBLISH_EVERY)
 
 
-def config_payload():
-    """Current bot settings, plus whether the server is up.
+def config_payload(ctx):
+    """Current bot settings of the realm, plus whether its server is up.
 
     This never touches the database, so the settings panel works with the server
-    stopped, which is when it is most useful.
+    stopped, which is when it is most useful. A realm of the launcher shows the values its last start used,
+    with the ones changed for it since (Royaumes\\<key>\\settings.json) on top: the launcher builds its files
+    again from those at every start.
     """
-    settings = botconfig.read_settings(CONFIG_DIR)
+    settings = botconfig.read_settings(ctx.config_dir)
     notes = []
+    launcher = ctx.realm.key != "coa"
+    if launcher:
+        own = realms.own_settings(ROOT, ctx.realm.key)
+        for setting in settings:
+            changed = (own.get(setting["file"]) or {}).get(setting["key"])
+            if changed is not None:
+                setting["value"] = changed.strip('"') if setting["kind"] == "quoted" else changed
+                setting["present"] = True
+            setting["locked"] = setting["key"] in realms.IMPOSED
+        notes.append("These are the settings of the %s realm. The launcher writes its files again at every start, "
+                     "from the CoA realm's settings and the ones changed here; the greyed ones belong to the "
+                     "realm's game mode." % ctx.realm.name)
     # Say so when the LLM chat module's config is not there, rather than leaving a
     # gap the user has to guess at.
     if any(not s["present"] for s in settings if s["file"] == botconfig.BOTMINDS):
         notes.append("LLM chat settings appear once mod-bot-minds is installed "
                      "and its mod_bot_minds.conf is in the modules folder.")
     return {
+        "realm": ctx.realm.public(),
         "settings": settings,
         "warnings": botconfig.override_warnings(settings),
         "overrides": botconfig.OVERRIDES,
         "recipes": botconfig.RECIPES,
-        "configDir": CONFIG_DIR,
-        "serverRunning": server_state().get("running", False),
+        "configDir": ctx.config_dir,
+        "serverRunning": server_state(ctx).get("running", False),
         "notes": notes,
     }
+
+
+def apply_realm_settings(ctx, changes):
+    """Settings of a realm of the launcher: into its settings.json (what the next start uses), and into its current
+    files so the page shows them at once. Returns (written, backups, errors) like botconfig.apply_settings."""
+    errors = {key: problem for key, value in changes.items() for problem in [botconfig.validate(key, value)] if problem}
+    errors.update({key: "set by the realm's game mode" for key in changes if key in realms.IMPOSED})
+    if errors:
+        return {}, [], errors
+    by_file = {}
+    for key, value in changes.items():
+        entry = botconfig.BY_KEY[key]
+        text = str(value).strip()
+        by_file.setdefault(entry.file, {})[key] = '"%s"' % text if entry.kind == "quoted" else text
+    realms.write_own_settings(ROOT, ctx.realm.key, by_file)
+    return botconfig.apply_settings(ctx.config_dir, changes, os.path.join(CONFIG_BACKUPS, ctx.realm.key))
 
 
 # The maps: tools/gen_art.py reads the player's own client and writes maps/ (maps only,
@@ -1254,42 +1455,37 @@ def start_art(client):
 
 def _armory_names():
     try:
-        STATS.load_names()
+        load_names()
     except Exception:  # noqa: BLE001  database down, or no coa-level-builds.json: what can be read still is
         try:
-            if not STATS.classes:
+            if not NAMES["classes"]:
                 for cls, name in mysql("SELECT class, client_name FROM %s.ascension_custom_class" % DB["world"]):
-                    STATS.classes[int(cls)] = name
-            if STATS.zones is None:
-                STATS.zones = zone_names()
+                    NAMES["classes"][int(cls)] = name
+            if NAMES["zones"] is None:
+                NAMES["zones"] = zone_names()
         except Exception:  # noqa: BLE001  names fall back to numbers, the sheet still answers
             pass
-    return STATS.classes, STATS.specs, STATS.zones or {}
+    return {**BASE_CLASSES, **NAMES["classes"]}, NAMES["specs"], NAMES["zones"] or {}
 
 
 # The armory (webapp/): character sheets on the dashboard itself (and in the CoA Server Manager, which shows this
 # page), never in the public copy. It reads the same databases with the same mysql client; the DBC names and the
 # icons (local client, else wow.zamimg.com unless "webIcons" is false) are optional extras.
-try:
-    from webapp.armory import Armory, BadRequest as ArmoryBadRequest, NotFound as ArmoryNotFound
-    ARMORY = Armory(mysql, DB, _armory_names, DBC_DIR, os.path.join(HERE, "icons"), guess_client(),
-                    web_icons=SETTINGS.get("webIcons", True) is not False)
-    ARMORY_ERROR = None
-except Exception as _error:  # noqa: BLE001  the dashboard runs without its armory
-    ARMORY, ARMORY_ERROR = None, "%s: %s" % (type(_error).__name__, _error)
+from webapp.armory import BadRequest as ArmoryBadRequest, NotFound as ArmoryNotFound  # noqa: E402
 
 
-def armory_answer(path, query):
+def armory_answer(ctx, path, query):
     """(status, payload) for /api/armory, /api/armory/status and /api/armory/character."""
-    if ARMORY is None:
-        return 503, {"error": "The armory could not start: %s" % ARMORY_ERROR}
+    armory = ctx.armory
+    if armory is None:
+        return 503, {"error": "The armory could not start: %s" % ctx.armory_error}
     name = (query.get("name") or [""])[0][:40]
     try:
         if path == "/api/armory/status":
-            return 200, ARMORY.status()
+            return 200, armory.status()
         if path == "/api/armory/character":
-            return 200, ARMORY.sheet(name)
-        return 200, ARMORY.search(name)
+            return 200, armory.sheet(name)
+        return 200, armory.search(name)
     except ArmoryBadRequest as error:
         return 400, {"error": str(error)}
     except ArmoryNotFound as error:
@@ -1297,6 +1493,17 @@ def armory_answer(path, query):
     except Exception as error:  # noqa: BLE001  database down or refusing: say so, keep running
         text = (str(error).splitlines() or [""])[0][:200]
         return 503, {"error": text if text.startswith("The database") else "The game database did not answer: " + text}
+
+
+def answer_or_error(work):
+    """(status, payload) of `work()`, or the database's trouble as a 503 the page can show."""
+    try:
+        return 200, work()
+    except gm.GmError as error:
+        return 400, {"error": str(error)}
+    except Exception as error:  # noqa: BLE001
+        text = (str(error).splitlines() or [""])[0][:200]
+        return 503, {"error": text}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -1339,9 +1546,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return False
         return True
 
+    def _realm(self):
+        """The realm a request is about: ?realm=<key>, the CoA realm without one."""
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        return context((query.get("realm") or ["coa"])[0])
+
+    def _body(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        if length > 65536:
+            raise ValueError("too long")
+        body = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+        if not isinstance(body, dict):
+            raise ValueError("not an object")
+        return body
+
     def _icon(self, leaf):
         """icons/<name>.png: an item icon for the armory, taken from the game client the first time."""
-        body = ARMORY.icons.png(leaf[:-4]) if ARMORY and leaf.endswith(".png") else None
+        armory = CONTEXTS[0].armory
+        body = armory.icons.png(leaf[:-4]) if armory and leaf.endswith(".png") else None
         if body is None:
             self.send_error(404)
             return
@@ -1357,24 +1579,42 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not self._own_host():
             return
         path = self.path.split("?")[0]
+        ctx = self._realm()
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        first = lambda key: (query.get(key) or [None])[0]  # noqa: E731
         if path == "/api/stats":
-            self._json(STATS.get())
+            self._json(ctx.stats.get())
+        elif path == "/api/realms":
+            self._json(realms_overview())
+        elif path == "/api/perf":
+            self._json(dict(MONITOR.series(ctx.realm.key, "week" if first("span") == "week" else "day"),
+                            realm=ctx.realm.public(), crashes=server_state(ctx), cores=procinfo.cores()))
+        elif path == "/api/market":
+            self._json(ctx.market.get())
+        elif path == "/api/gm":
+            if not GM_ENABLED:
+                self._json({"error": "The GM tools are turned off in dashboard.json (gmTools)."}, 403)
+                return
+            running = bool(MONITOR.state(ctx.realm.key).get("running"))
+            status, payload = answer_or_error(lambda: GM.overview(ctx, MONITOR._ra_port(ctx.realm), running))
+            zones = _armory_names()[2] if status == 200 else {}
+            for player in payload.get("players") or []:
+                player["zoneName"] = zones.get(player["zone"], "")
+            self._json(payload, status)
         elif path == "/api/config":
-            self._json(config_payload())
+            self._json(config_payload(ctx))
         elif path == "/api/logs":
-            self._json(dict(botconfig.log_setup(CONFIG_DIR), serverRunning=server_state().get("running", False)))
+            self._json(dict(botconfig.log_setup(ctx.config_dir), serverRunning=server_state(ctx).get("running", False)))
         elif path == "/api/pvp":
-            self._send(PVP.get(), "application/json; charset=utf-8")
+            self._send(ctx.pvp.get(), "application/json; charset=utf-8")
         elif path == "/api/art":
             self._json(art_status())
         elif path == "/api/live":
-            self._send(live_status_body(), "application/json; charset=utf-8")
+            self._send(live_status_body(ctx), "application/json; charset=utf-8")
         elif path == "/api/chat":
-            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            first = lambda key: (query.get(key) or [None])[0]  # noqa: E731
-            self._json(chat_feed(first("limit") or 100, first("kind"), first("q"), first("bot")))
+            self._json(chat_feed(first("limit") or 100, first("kind"), first("q"), first("bot"), path=ctx.chat_log))
         elif path in ("/api/armory", "/api/armory/status", "/api/armory/character"):
-            status, payload = armory_answer(path, urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query))
+            status, payload = armory_answer(ctx, path, query)
             self._json(payload, status)
         elif path.startswith("/icons/"):
             self._icon(path[len("/icons/"):])
@@ -1434,6 +1674,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not self._own_host():
             return
         path = self.path.split("?")[0]
+        ctx = self._realm()
+        if path == "/api/gm":
+            if not self._local_only():
+                return
+            if not GM_ENABLED:
+                self._json({"error": "The GM tools are turned off in dashboard.json (gmTools)."}, 403)
+                return
+            try:
+                body = self._body()
+            except ValueError:
+                self._json({"error": "expected a JSON object"}, 400)
+                return
+            status, payload = answer_or_error(lambda: GM.run(ctx, MONITOR._ra_port(ctx.realm), body))
+            self._json(payload, status)
+            return
         if path == "/api/art":
             if not self._local_only():
                 return
@@ -1453,13 +1708,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not self._local_only():
                 return
             try:
-                changed, backup = botconfig.enable_logs(CONFIG_DIR, CONFIG_BACKUPS)
+                changed, backup = botconfig.enable_logs(ctx.config_dir, CONFIG_BACKUPS)
             except Exception as error:           # noqa: BLE001
                 self._json({"error": "%s: %s" % (type(error).__name__, error)}, 500)
                 return
-            self._json(dict(botconfig.log_setup(CONFIG_DIR), changed=changed,
+            self._json(dict(botconfig.log_setup(ctx.config_dir), changed=changed,
                             backup=os.path.basename(backup) if backup else None,
-                            serverRunning=server_state().get("running", False)))
+                            serverRunning=server_state(ctx).get("running", False)))
             return
         if path != "/api/config":
             self.send_error(404)
@@ -1472,12 +1727,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not isinstance(changes, dict) or not changes:
                 self._json({"error": "expected a JSON object of settings"}, 400)
                 return
-            written, backups, errors = botconfig.apply_settings(
-                CONFIG_DIR, changes, CONFIG_BACKUPS)
+            if ctx.realm.key == "coa":
+                written, backups, errors = botconfig.apply_settings(ctx.config_dir, changes, CONFIG_BACKUPS)
+            else:
+                written, backups, errors = apply_realm_settings(ctx, changes)
             if errors:
                 self._json({"errors": errors}, 400)
                 return
-            running = server_state().get("running", False)
+            running = server_state(ctx).get("running", False)
             self._json({
                 "written": written,
                 "backups": [os.path.basename(b) for b in backups],
@@ -1487,7 +1744,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                          "effect until it is restarted."
                          if running else
                          "The server is stopped, so these take effect the next time it starts."),
-                "settings": botconfig.read_settings(CONFIG_DIR),
+                "settings": config_payload(ctx)["settings"],
             })
         except Exception as error:               # noqa: BLE001 - report, never 500 blindly
             self._json({"error": "%s: %s" % (type(error).__name__, error)}, 500)
@@ -1515,14 +1772,22 @@ class LanHandler(Handler):
     def do_GET(self):
         path = urllib.parse.urlsplit(self.path).path
         leaf = path.lstrip("/") or "index.html"
+        realm = re.match(r"^(stats|live|pvp)(?:-([a-z]{3,12}))?\.json$", leaf)
+        ctx = BY_KEY.get(realm.group(2) or "coa") if realm else None
+        if realm and (ctx is None or ctx.realm.key not in PUBLIC_REALMS):
+            self.send_error(404)
+            return
         try:
-            if leaf == "stats.json":
-                self._send(json.dumps(public_copy(STATS.get()), ensure_ascii=False, separators=(",", ":"))
+            if leaf == "realms.json":
+                self._send(json.dumps(public_realms(), ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+                           "application/json; charset=utf-8")
+            elif realm and realm.group(1) == "stats":
+                self._send(json.dumps(public_copy(ctx.stats.get()), ensure_ascii=False, separators=(",", ":"))
                            .encode("utf-8"), "application/json; charset=utf-8")
-            elif leaf == "live.json":
-                self._send(public_live_body(), "application/json; charset=utf-8")
-            elif leaf == "pvp.json":
-                body = PVP.get()
+            elif realm and realm.group(1) == "live":
+                self._send(public_live_body(ctx), "application/json; charset=utf-8")
+            elif realm and realm.group(1) == "pvp":
+                body = ctx.pvp.get()
                 # The error text may hold paths: visitors only learn that the figures are missing.
                 self._send(b'{"error":"unavailable"}' if b'"error"' in body[:20] else body,
                            "application/json; charset=utf-8")
@@ -1547,9 +1812,19 @@ class LanHandler(Handler):
         self.send_error(405)
 
 
+for _realm in REALMS:
+    CONTEXTS.append(Context(_realm))
+    BY_KEY[_realm.key] = CONTEXTS[-1]
+# The realms the public copy and the local network page show: all of them unless dashboard.json lists some.
+PUBLIC_REALMS = set(SETTINGS.get("publicRealms") or BY_KEY)
+
+
 if __name__ == "__main__":
     server = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print("SquidBots dashboard: http://localhost:%d  (Ctrl+C to stop)" % PORT, flush=True)
+    if len(REALMS) > 1:
+        print("Realms: %s" % ", ".join("%s (%s)" % (r.name, r.key) for r in REALMS), flush=True)
+    MONITOR.start()
     if PUBLISH_DIR:
         threading.Thread(target=publish_loop, daemon=True).start()
         threading.Thread(target=live_publish_loop, daemon=True).start()

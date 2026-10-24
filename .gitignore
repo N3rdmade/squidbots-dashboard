@@ -12,6 +12,10 @@ xp-history.json
 *.tmp
 levels.json
 kills.json
+# What the dashboard keeps per realm (performance, auction house history, GM journal), since 2.8.
+data/
+# Shipped with CoA Bots beside the dashboard, not part of this repository.
+coa-level-builds.json
 
 # Backups the Settings page takes before it writes a .conf.
 config-backups/

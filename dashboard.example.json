@@ -42,5 +42,16 @@
   "footer": "",
 
   "_comment_publish": "Optional: a folder a web server serves. The dashboard writes only the public page there (index.html, static/, worldmap.json, maps/, stats.json and pvp.json every minute, live.json every 12 s), so nothing on this machine is reachable from outside.",
-  "publishDir": "\\\\my-nas\\www\\bots"
+  "publishDir": "\\\\my-nas\\www\\bots",
+
+  "_comment_realms": "The Wildcard and Reborn realms of the launcher (Royaumes folder) are found on their own; false shows the CoA realm only. publicRealms limits the realms of the public copy and of the local network page (all of them by default).",
+  "realms": true,
+  "publicRealms": ["coa", "wildcard", "reborn"],
+
+  "_comment_monitor": "Server health: one reading every monitorEvery seconds (process figures from Windows and one 'server info' on each realm's console, never the database); 0 turns it off. console false leaves the realms' consoles alone (no tick, no players, no GM tools).",
+  "monitorEvery": 60,
+  "console": true,
+
+  "_comment_gm": "The Game master page (this PC only): commands sent to the realm's console with the repack's console account. false removes it.",
+  "gmTools": true
 }

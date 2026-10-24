@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.8 (for CoA Bots 2.8)
+
+- **Every realm of the server.** Beside the CoA realm, the Wildcard (Darkmoon) and Warcraft Reborn (Bronzebeard)
+  realms the launcher adds are found on their own (`Royaumes\<key>`, read only): a realm picker in the side bar,
+  each page on the realm picked (`?realm=wildcard` opens it), its own databases, journals, live map and PvP. A new
+  **Realms** page shows them side by side: online or not, bots and players online, average level, tick, memory,
+  crashes and the bots of the last hours. A server without extra realms looks exactly as before.
+- Fixed for the extra realms: their bots (`RNDWC…`, `RNDWR…` accounts) counted as players; "online" and the
+  memory followed any worldserver.exe (all realms run the same one); the server hours added up every realm's
+  uptime; the Settings page wrote files the launcher builds again at every start. Settings of a realm now go to
+  its `settings.json`, the launcher's own layer, and the values its game mode sets are shown greyed.
+- **Server health** page: tick (the world's update time), players, bots, memory, processor and crashes now, curves
+  over 24 hours and 7 days, the realm's starts, stops and crash reports, and plain advice when something is off.
+  Measured once a minute at almost no cost: the process figures come from Windows directly, one `server info` on
+  the realm's console, never the database (`monitorEvery`, 0 turns it off).
+- **Auction house** page: auctions by house, by seller (auction house bot, random bots, players), by quality and by
+  kind of item, the most expensive ones, the week's curve, and the auction house bot's own commands (run a cycle,
+  reload its settings, empty its auctions).
+- **Game master** page, on this PC only: a message to every player (chat or screen), save every character, and for a
+  player of the list kick, revive, unstuck, mute, set the level, send gold or an item, ban or unban the account,
+  set its GM level. Each action is the server's own console command (the repack's console account), checked
+  first and kept in `data\gm-actions.jsonl`. `"gmTools": false` in dashboard.json removes it.
+- Lighter: a tab in the background asks nothing, the names shared by every realm are read once, and the public copy
+  and the local network page carry every realm (`realms.json`, `stats-<key>.json`; `publicRealms` limits them).
+
 ## 2.1 (for CoA Bots 2.1)
 
 - **Turn the journals on** writes the repack's `Settings\worldserver.conf.template`: the repack rebuilds both

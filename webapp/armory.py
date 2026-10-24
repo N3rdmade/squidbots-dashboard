@@ -125,10 +125,12 @@ def _enchant_ids(text):
 
 
 class Armory:
-    def __init__(self, query, databases, names, dbc_dir, icons_dir, client_dir, web_icons=True, search_client=True):
+    def __init__(self, query, databases, names, dbc_dir, icons_dir, client_dir, web_icons=True, search_client=True,
+                 bot_accounts=BOT_ACCOUNTS):
         """`query(sql)` returns rows of strings (squidbots.py's mysql()). `names()` returns
         (classes, specs, zones): the dashboard's own lookup tables."""
         self.query, self.names = query, names
+        self.bot_accounts = bot_accounts       # the realm's own bot accounts (RNDWC% on the Wildcard realm, say)
         self.chars, self.auth, self.world = databases["characters"], databases["auth"], databases["world"]
         self.dbc = Tables(dbc_dir)
         self.icons = Icons(icons_dir, client_dir, self.dbc, web=web_icons, search=search_client)
@@ -191,7 +193,7 @@ class Armory:
             raise BadRequest("Type at least two letters of a character name.")
         rows = self.rows("SELECT " + CHARACTER_COLUMNS + "%s " + self._joins()
                          + "WHERE c.name LIKE %s ORDER BY c.name = %s DESC, c.level DESC LIMIT 25",
-                         (BOT_ACCOUNTS, text + "%", text))
+                         (self.bot_accounts, text + "%", text))
         return {"characters": [self._character(row) for row in rows]}
 
     def sheet(self, name):
@@ -199,7 +201,7 @@ class Armory:
         if not NAME_RE.match(name):
             raise BadRequest("A character name is letters, with one space at most.")
         found = self.rows("SELECT c.guid, " + CHARACTER_COLUMNS + "%s " + self._joins() + "WHERE c.name = %s",
-                          (BOT_ACCOUNTS, name))
+                          (self.bot_accounts, name))
         if not found:
             raise NotFound("No character by that name.")
         guid = _int(found[0][0])
