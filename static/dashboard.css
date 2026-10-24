@@ -659,7 +659,7 @@ h2 .state-badge { margin-left: 8px; vertical-align: 3px; }
 .state-badge.starting { color: var(--gold-bright); }
 .state-badge.stopped { color: var(--bad); }
 .realm-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-@media (min-width: 1400px) { .realm-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1700px) { .realm-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .rt { display: flex; flex-direction: column; padding: 8px 10px; border-radius: 3px; background: rgba(0, 0, 0, .28); border: 1px solid var(--hairline); min-width: 0; }
 .rt .label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rt b { font: 700 19px/1.2 var(--display); color: var(--text-primary); margin-top: 2px; }

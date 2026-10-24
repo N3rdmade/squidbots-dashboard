@@ -158,6 +158,9 @@ class Gm:
         # A refused command answers with the core's own message; the console has no exit code to read.
         if ok and re.search(r"(not found|no such|incorrect|wrong|syntax|unknown|does not exist|can't|cannot)", answer, re.I):
             ok = False
+        # The core answers a command it could not run with its help text: kick, for one, needs the player online.
+        if answer.startswith("Syntax:"):
+            answer = "The server did not run it (is the player online?). " + answer.splitlines()[0]
         self.write(ctx.realm.key, action, command, ok, answer)
         return {"ok": ok, "command": command, "answer": answer[:2000]}
 
