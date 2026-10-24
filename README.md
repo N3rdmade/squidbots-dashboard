@@ -12,33 +12,36 @@ the database, and runs on the Python that ships with the repack: no framework, n
 package to install, no request to any outside site.
 
 It comes in two versions from the same code: a **private** one on `localhost` with everything,
-including the bot settings, and a **public** copy of plain files you can put on any web server.
+including the server's health, its auction house and the game master tools, and a **public** copy of plain
+files you can put on any web server. With the SquidBots launcher it follows every realm of the server: the
+Conquest of Azeroth realm, and the Wildcard and Warcraft Reborn realms beside it.
 
 ## What you get
 
 **World** — the headline figures, each continent's map with every bot on it (click a zone for its
 own map, a bot for its card), and the bot you follow, live: the page at the top of this file.
 
-| **Bots** | **Stats** |
+| **Realms** | **Bots** |
 |---|---|
-| ![Bots](docs/bots.png) | ![Stats](docs/stats.png) |
-| Every bot online, sortable and filterable: class, specialization, zone, what it is doing right now, health. | Hunting pace, factions and roles, busiest zones, today against yesterday, bots on the floor, level spread, stuck bots and crashes, experience per hour, leaderboard, spells cast, class ranking. |
-| **Chat & Loot** | **Settings** (private version only) |
-| ![Chat and loot](docs/chat.png) | ![Settings](docs/settings.png) |
-| The live chat feed (private version; searchable, every 5 s), the most talkative bots, and the epics and rares they find. | The bot settings that matter, in plain words, with a warning when another setting cancels one out, and one-click recipes such as *CoA Bots v1.4: the recommended settings*. |
+| ![Realms](docs/realms.png) | ![Bots](docs/bots.png) |
+| Every realm of the server side by side: online or not, bots and players, average level, the world's tick, memory, crashes, the bots of the last hours. | Every bot online, sortable and filterable: class, specialization, zone, what it is doing right now, health. |
+| **Stats** | **Chat & Loot** |
+| ![Stats](docs/stats.png) | ![Chat and loot](docs/chat.png) |
+| Hunting pace, factions and roles, busiest zones, today against yesterday, bots on the floor, level spread, stuck bots and crashes, experience per hour, leaderboard, spells cast, class ranking. | The live chat feed (private version; searchable, every 5 s), the most talkative bots, and the epics and rares they find. |
+| **Server** (private version) | **Auction house** (private version) |
+| ![Server health](docs/server.png) | ![Auction house](docs/market.png) |
+| The realm's tick, players, bots, memory, processor and crashes, over 24 hours and 7 days, with plain advice. | Auctions by house, by seller and by quality, the most expensive, the week's curve, and the auction house bot's commands. |
+
+**Game master** (private version) — a message to every player, and for a player of the list: kick, revive,
+unstuck, mute, level, gold or an item by mail, ban, GM level. Each action is the server's own console command.
+
+![Game master tools](docs/gm.png)
 
 **PvP** — battlegrounds by type (games, wins per side, objectives, killing blows), arenas by
 bracket (fights, average and median length), classes in battlegrounds and arenas, the top arena
 teams, and the High Risk and War Mode characters, over the last 24 hours and since a date you pick
 (`pvpSince` in `dashboard.json`; without it, the whole history). No character is named: a team
 keeps its name only when all its members are random bots, otherwise it shows as a players' team.
-
-**The bots' chat language**, on the Chat & Loot page (private version): what bots say on their
-own in the channels, in say and in whispers comes from the server's translated lines
-(`AiPlayerbot.BotTextLocale`). Pick Auto (the players' game client), English, Français, Deutsch,
-Español or Русский; it applies when the game server restarts. No AI involved.
-
-<img src="docs/card.png" align="right" width="230" alt="A bot's card">
 
 **Every bot has a card.** Click it on the map, in the list or through the search box: class and
 specialization, what it is doing (*Fighting Blackhand Thug*, *Questing: Border Crossings*,
@@ -51,8 +54,6 @@ Without it the card falls back to the last character save: alive or dead, online
 English and French. The SquidBots launcher's own look (deep navy, teal light, the gold octopus crest and its line
 icons), so the launcher and the dashboard read as one product. The Cinzel and Inter fonts are bundled under the SIL
 Open Font License (`static/fonts/OFL.txt`).
-
-<br clear="right">
 
 ## Several realms: CoA, Wildcard, Reborn
 
@@ -171,7 +172,8 @@ it sets the required ones in place, after a backup of `worldserver.conf`.
 
 ## The Settings page
 
-It changes values in the module `.conf` files (`playerbots.conf`, `dynamicxp.conf`, and
+Only for a server run without the SquidBots launcher, with `"settingsPage": true` in `dashboard.json`: the launcher
+owns the settings of its servers and writes every `.conf` file again at each start. The page changes values in the module `.conf` files (`playerbots.conf`, `dynamicxp.conf`, and
 `mod_bot_minds.conf` when [mod-bot-minds](https://github.com/vedicveko/mod-bot-minds) is
 installed). It edits values in place and never reorders lines; the only line it may add is the bots'
 chat language, at the end of `playerbots.conf`, when an older file lacks it. It backs the whole file up to
