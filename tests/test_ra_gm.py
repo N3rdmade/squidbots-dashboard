@@ -136,7 +136,23 @@ class MonitorTest(unittest.TestCase):
         watch.round()
         watch.round()
         self.assertEqual([e["kind"] for e in watch.tracks["reborn"].events], ["down"])
-        self.assertEqual(len(watch.downs("reborn", 0)), 1)
+        self.assertEqual(len(watch.crashes("reborn", 0)), 1)
+
+    def test_crash_report_goes_to_the_realm_that_went_down(self):
+        here = tempfile.mkdtemp()
+        shared = os.path.join(here, "Crashes")
+        os.makedirs(shared)
+        make = lambda key, crashes: realms.Realm(key, 1, key, {"auth": "a", "characters": "c", "world": "w"}, here, here,  # noqa: E731
+                                                 crashes, here, "rndbot", here=here)
+        coa, reborn = make("coa", [shared]), make("reborn", [os.path.join(here, "none")])
+        watch = monitor.Monitor([coa, reborn], here, lambda key: None, every=60, use_ra=False)
+        watch.tracks["coa"].crash_seen = 0
+        report = os.path.join(shared, "x_worldserver.exe_[24-10_11-38-4].txt")
+        open(report, "w").close()
+        watch.tracks["reborn"].event("down")
+        self.assertEqual(watch._crash_reports(), {"reborn"})
+        self.assertEqual([e["kind"] for e in watch.tracks["coa"].events], [])
+        self.assertIn("x_worldserver", watch.tracks["reborn"].events[0]["text"])
 
 
 if __name__ == "__main__":

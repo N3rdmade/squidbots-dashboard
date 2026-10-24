@@ -650,8 +650,10 @@ def server_state(ctx):
     now = MONITOR.state(ctx.realm.key)
     state["running"], state["ramMo"] = bool(now.get("running")), now.get("ramMo")
     since = (COUNT_FROM if ctx.realm.key == "coa" else None) or time.time() - 24 * 3600
-    # Crash reports, and the times the world went down on its own without writing one.
-    crashes = recent_crashes(ctx.realm.crashes, since) + MONITOR.downs(ctx.realm.key, since)
+    # The monitor gives each crash report to its realm (every realm's worldserver writes them in the same folder) and
+    # counts the worlds that went down on their own without one; without sampling, the CoA realm reads the folder.
+    crashes = (MONITOR.crashes(ctx.realm.key, since) if MONITOR.every
+               else recent_crashes(ctx.realm.crashes, since) if ctx.realm.key == "coa" else [])
     state["crashes24h"] = len(crashes)
     if crashes:
         state["lastCrash"] = datetime.datetime.fromtimestamp(max(crashes)).strftime("%d/%m %H:%M")

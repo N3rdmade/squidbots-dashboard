@@ -167,6 +167,7 @@ class Monitor:
 
     def round(self):
         pids = self._claimed()
+        changed = set()
         for realm in self.realms:
             track = self.tracks[realm.key]
             before = track.state
@@ -174,31 +175,55 @@ class Monitor:
                 state = self.look(realm, pids)
             except Exception as error:  # noqa: BLE001  one realm's trouble never stops the others
                 state = {"running": False, "error": str(error), "at": round(time.time())}
-            happened = False
             if before.get("running") != state.get("running") and "at" in before:
                 # The launcher forgets a realm's pid (.state.json) when it stops it: a world gone while its pid is
                 # still recorded stopped on its own, a crash even when the core wrote no report (a heap fault, say).
                 gone = (not state.get("running") and realm.key != "coa" and before.get("pid")
                         and realm.pid() == before.get("pid"))
                 track.event("start" if state.get("running") else "down" if gone else "stop")
-                happened = True
-            for stamp in self._new_crashes(realm, track):
-                track.event("crash", time.strftime("%d/%m %H:%M", time.localtime(stamp)))
-                happened = True
+                changed.add(realm.key)
             with self.lock:
                 track.state = state
                 track.add({"ts": state["at"], "up": 1 if state.get("running") else 0, "ram": state.get("ramMo"),
                            "cpu": state.get("cpu"), "tick": state.get("tickMean") or state.get("tick"),
                            "players": state.get("players"), "bots": state.get("bots")})
-            track.save(force=happened)     # an event is kept at once, the curves every few minutes
+        changed |= self._crash_reports()
+        for realm in self.realms:
+            self.tracks[realm.key].save(force=realm.key in changed)     # events at once, curves every few minutes
 
-    def _new_crashes(self, realm, track):
-        found = [os.path.getmtime(f) for folder in realm.crashes
-                 for f in glob.glob(os.path.join(glob.escape(folder), "*.txt"))]
-        new = sorted(t for t in found if t > track.crash_seen)
-        if new:
-            track.crash_seen = new[-1]
-        return new
+    def _crash_reports(self):
+        """New crash reports, each given to its realm. Every realm runs the same worldserver.exe, which writes its
+        reports beside itself (CoA-Bots/Core/Crashes): a report belongs to the realm whose world went down
+        within the three minutes after it, else to the CoA realm. Returns the realms that got one."""
+        coa = self.tracks[self.realms[0].key]
+        folders = {folder for realm in self.realms for folder in realm.crashes}
+        found = sorted((os.path.getmtime(f), f) for folder in folders
+                       for f in glob.glob(os.path.join(glob.escape(folder), "*.txt")))
+        new = [(t, f) for t, f in found if t > coa.crash_seen]
+        if not new:
+            return set()
+        coa.crash_seen = new[-1][0]
+        got = set()
+        for stamp, name in new:
+            owner, event = self.realms[0].key, None
+            for realm in self.realms[1:]:
+                for e in self.tracks[realm.key].events:
+                    if e["kind"] == "down" and stamp - 5 <= e["ts"] <= stamp + 180:
+                        owner, event = realm.key, e
+            when = time.strftime("%d/%m %H:%M", time.localtime(stamp))
+            if event is not None:
+                event["text"] = when + " · " + os.path.basename(name)     # the down event gets its report
+            else:
+                self.tracks[owner].event("crash", when + " · " + os.path.basename(name))
+            got.add(owner)
+        return got
+
+    def crashes(self, key, since):
+        """When the realm crashed since `since`: its crash reports and its worlds gone down on their own."""
+        track = self.tracks.get(key)
+        with self.lock:
+            return [e["ts"] for e in (track.events if track else [])
+                    if e["kind"] in ("crash", "down") and e["ts"] > since]
 
     def loop(self):
         while True:
@@ -228,12 +253,6 @@ class Monitor:
             with self.lock:
                 track.state = self.look(realm, self._claimed(), with_ra=False)
         return track.state
-
-    def downs(self, key, since):
-        """When the realm's world stopped on its own (no crash report needed) since `since`."""
-        track = self.tracks.get(key)
-        with self.lock:
-            return [e["ts"] for e in (track.events if track else []) if e["kind"] == "down" and e["ts"] > since]
 
     def series(self, key, span="day"):
         track = self.tracks.get(key)
