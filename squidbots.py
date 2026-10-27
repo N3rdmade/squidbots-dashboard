@@ -1667,8 +1667,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/character-viewer-config":
             folder = os.path.realpath(os.path.expanduser(
                 SETTINGS.get("wotlkViewerDir") or os.path.join(os.path.expanduser("~"), "coa-server", "assets", "wotlk-model-data")))
-            script = os.path.isfile(os.path.join(folder, "viewer", "viewer.min.js"))
-            self._json({"ready": script, "configured": bool(SETTINGS.get("wotlkViewerDir"))})
+            ready = os.path.isdir(folder) and any(os.scandir(folder))
+            self._json({"ready": ready, "configured": bool(SETTINGS.get("wotlkViewerDir"))})
         elif re.fullmatch(r"/wotlk-model-data/[A-Za-z0-9_./-]{1,220}", path):
             folder = os.path.realpath(os.path.expanduser(
                 SETTINGS.get("wotlkViewerDir") or os.path.join(HERE, "wotlk-model-data")))
