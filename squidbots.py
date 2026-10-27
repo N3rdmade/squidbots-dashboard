@@ -1645,7 +1645,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._json({"error": "Invalid pagination cursor"}, 400)
                 return
             cursor = min(int(after), 4294967295)
-            sql = ("SELECT entry, name, Quality, ItemLevel, stackable, displayid "
+            sql = ("SELECT entry, name, Quality, ItemLevel, stackable, displayid, InventoryType "
                    "FROM `%s`.item_template "
                    "WHERE entry > %d AND CONVERT(name USING utf8mb4) COLLATE utf8mb4_unicode_ci "
                    "LIKE CONCAT('%%', CONVERT(X'%s' USING utf8mb4) COLLATE utf8mb4_unicode_ci, '%%') "
@@ -1658,12 +1658,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 icons = armory._icon_names(int(row[5]) for row in rows) if armory else {}
                 results = [{"id": int(row[0]), "name": row[1], "quality": int(row[2]),
                             "level": int(row[3]), "stack": int(row[4]),
-                            "displayId": int(row[5]),
+                            "displayId": int(row[5]), "inventoryType": int(row[6]),
                             "icon": icons.get(int(row[5]), "")} for row in rows]
                 return {"items": results, "next": int(rows[-1][0]) if more and rows else None,
                         "source": ctx.db["world"] + ".item_template"}
             status, payload = answer_or_error(item_results)
             self._json(payload, status)
+        elif path == "/api/character-viewer-config":
+            folder = os.path.realpath(os.path.expanduser(
+                SETTINGS.get("wotlkViewerDir") or os.path.join(HERE, "wotlk-model-data")))
+            script = os.path.isfile(os.path.join(folder, "viewer", "viewer.min.js"))
+            self._json({"ready": script, "configured": bool(SETTINGS.get("wotlkViewerDir"))})
+        elif re.fullmatch(r"/wotlk-model-data/[A-Za-z0-9_./-]{1,220}", path):
+            folder = os.path.realpath(os.path.expanduser(
+                SETTINGS.get("wotlkViewerDir") or os.path.join(HERE, "wotlk-model-data")))
+            target = os.path.realpath(os.path.join(folder, path[len("/wotlk-model-data/"):]))
+            if not target.startswith(folder + os.sep) or not os.path.isfile(target):
+                self.send_error(404)
+                return
+            # Local 3D data is served only via the private Handler, not the LAN handler.
+            content_types = {".js":"application/javascript", ".json":"application/json",
+                             ".bin":"application/octet-stream", ".png":"image/png",
+                             ".jpg":"image/jpeg", ".jpeg":"image/jpeg",
+                             ".webp":"image/webp", ".blp":"application/octet-stream",
+                             ".m2":"application/octet-stream", ".skin":"application/octet-stream",
+                             ".mo3":"application/octet-stream"}
+            kind = content_types.get(os.path.splitext(target)[1].lower(), "application/octet-stream")
+            if os.path.getsize(target) > 64*1024*1024:
+                self.send_error(413)
+                return
+            with open(target, "rb") as handle:
+                self._send(handle.read(), kind)
         elif path == "/api/model-mode":
             self._json({"mode": "local", "configured": os.path.isdir(MODEL_DIR)})
         elif path == "/api/model-available":
