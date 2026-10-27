@@ -6,23 +6,41 @@
   async function chooseClientFolder() {
     const status = $('mailClientStatus');
     if (!window.showDirectoryPicker) {
-      if(status) status.textContent = 'Use Chrome or Edge on localhost to select a local client folder.';
+      if (status) status.textContent = 'Folder access requires Chrome or Edge on localhost.';
       return;
     }
     try {
       const folder = await window.showDirectoryPicker({mode:'read', id:'coa-client'});
-      const data = await folder.getDirectoryHandle('Data');
-      let count = 0;
-      for await (const [name, handle] of data.entries()) {
-        if (handle.kind === 'file' && /\\.mpq$/i.test(name)) count++;
+      let count = 0, dataFound = false, scanned = 0;
+      const dirs = [{dir:folder, depth:0}];
+      const sample = [];
+      // Scan a small, bounded portion of the directory tree without reading or uploading file contents.
+      while (dirs.length && scanned < 12000) {
+        const {dir,depth} = dirs.shift();
+        for await (const [name, handle] of dir.entries()) {
+          if (++scanned > 12000) break;
+          if (depth === 0 && name.toLowerCase() === 'data' && handle.kind === 'directory') dataFound = true;
+          if (handle.kind === 'file') {
+            if (/\.mpq$/i.test(name)) count++;
+            if (sample.length < 12) sample.push(name);
+          } else if (depth < 3 && (depth === 0 || /^(data|en[a-z]{2}|client|patches|locale)$/i.test(name))) {
+            dirs.push({dir:handle,depth:depth+1});
+          }
+        }
       }
-      if (!count) throw Error('No MPQ archives found in Data. Select the root of your CoA client.');
       clientFolder = folder;
       clientFolderName = folder.name;
       clientArchiveCount = count;
       redraw();
+      const message = $('mailClientStatus');
+      if (message) {
+        message.textContent = count ? folder.name + ' · ' + count + ' MPQ archive(s) detected (local only)' :
+          folder.name + ' selected, but no MPQ archives detected. Data directory ' +
+          (dataFound ? 'found' : 'not found') + '. Sample files: ' + (sample.join(', ') || 'none') +
+          '. This client may use another asset format.';
+      }
     } catch (error) {
-      if (error.name !== 'AbortError' && status) status.textContent = error.message;
+      if (error.name !== 'AbortError' && status) status.textContent = 'Could not inspect folder: ' + error.message;
     }
   }
   const html = s => esc(String(s ?? ""));
