@@ -117,6 +117,7 @@
   let modelSeq = 0;
   async function updateModel() {
     const frame = $('mailModelFrame'), item = selected, seq = ++modelSeq;
+    if(activeMeshViewer){activeMeshViewer();activeMeshViewer=null;}
     if (!frame || !item) return;
     const id = Number(item.displayId);
     if (!Number.isSafeInteger(id) || id <= 0) {
@@ -180,13 +181,58 @@
       });
       if(seq!==appearanceSeq || !$('mailModelFrame'))return;
       appearanceCache.set(id,result);
-      $('mailModelFrame').textContent='CoA appearance found in '+result.archive+
-        '. Model: '+(result.model1||'(no standalone model)') +
-        (result.model2?' / '+result.model2:'')+
-        '. Native M2 rendering is not yet connected.';
+      $('mailModelFrame').textContent='Opening native M2 geometry…';
+      try{await showNativeMesh(item,result,seq);}
+      catch(error){if(seq===appearanceSeq && $('mailModelFrame'))$('mailModelFrame').textContent=
+        'Model found: '+(result.model1||result.model2)+'. Renderer: '+error.message;}
     }catch(error){
       if(seq===appearanceSeq && $('mailModelFrame'))$('mailModelFrame').textContent='Client appearance lookup: '+error.message;
     }
+  }
+  let activeMeshViewer = null;
+  async function showNativeMesh(item, result, seq) {
+    const frame = $('mailModelFrame');
+    if(!frame || seq!==appearanceSeq)return;
+    const {loadCoAMesh}=await import('/static/client-mpq.js');
+    const mesh=await loadCoAMesh(clientFolder,result,msg=>{
+      if(seq===appearanceSeq && $('mailModelFrame'))$('mailModelFrame').textContent=msg;
+    });
+    if(seq!==appearanceSeq || !$('mailModelFrame'))return;
+    const THREE=await import('https://esm.sh/three@0.170.0');
+    const {OrbitControls}=await import('https://esm.sh/three@0.170.0/examples/jsm/controls/OrbitControls.js');
+    if(seq!==appearanceSeq || !$('mailModelFrame'))return;
+    frame.replaceChildren();
+    const canvas=document.createElement('canvas');
+    canvas.style.cssText='height:410px;width:100%;display:block;touch-action:none;';
+    frame.appendChild(canvas);
+    const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+    const width=Math.max(frame.clientWidth,280),height=410;
+    renderer.setSize(width,height,false);
+    const scene=new THREE.Scene();
+    const camera=new THREE.PerspectiveCamera(40,width/height,0.01,1000);
+    const geometry=new THREE.BufferGeometry();
+    geometry.setAttribute('position',new THREE.BufferAttribute(mesh.positions,3));
+    geometry.setAttribute('normal',new THREE.BufferAttribute(mesh.normals,3));
+    geometry.setAttribute('uv',new THREE.BufferAttribute(mesh.uvs,2));
+    geometry.setIndex(new THREE.BufferAttribute(mesh.triangles,1));
+    geometry.computeBoundingSphere();
+    const material=new THREE.MeshStandardMaterial({color:0xb4c8d8,metalness:0.65,roughness:0.4,side:THREE.DoubleSide});
+    const object=new THREE.Mesh(geometry,material);
+    scene.add(object);
+    const sphere=geometry.boundingSphere;
+    camera.position.copy(sphere.center).add(new THREE.Vector3(0,-Math.max(sphere.radius*3,0.5),Math.max(sphere.radius,0.2)));
+    scene.add(new THREE.HemisphereLight(0xffffff,0x455e75,2));
+    const light=new THREE.DirectionalLight(0xffffff,3);light.position.set(3,-5,8);scene.add(light);
+    const controls=new OrbitControls(camera,canvas);
+    controls.target.copy(sphere.center);controls.enableDamping=true;controls.update();
+    let alive=true,raf=0;
+    const animate=()=>{if(!alive)return;raf=requestAnimationFrame(animate);controls.update();renderer.render(scene,camera);};
+    animate();
+    activeMeshViewer=()=>{alive=false;cancelAnimationFrame(raf);controls.dispose();geometry.dispose();material.dispose();renderer.dispose();};
+    const caption=document.createElement('div');caption.className='meta';
+    caption.textContent='Untextured native model · '+mesh.vertices+' vertices · Drag to rotate, scroll to zoom';
+    frame.appendChild(caption);
   }
   // Redraw while retaining the composer's unsent text and selected recipient.
   function redraw() {
