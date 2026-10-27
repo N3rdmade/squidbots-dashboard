@@ -103,7 +103,7 @@
       '<p class="gm-result" role="status" id="mailFeedback"></p></section>' +
       '<section class="card mail-preview"><div class="mail-heading"><h2>Item Preview</h2><span class="meta">3D model workspace</span></div>' +
       '<div class="mail-client-source"><button class="btn small" id="mailCharacterMode" type="button">' +
-      (characterMode?'3D character preview':'Experimental item mesh') + '</button></div>' +
+      (characterMode?'Switch to experimental item mesh':'Switch to 3D character') + '</button></div>' +
       '<div class="mail-client-source"><button class="btn small" id="mailChooseCoA" type="button">' +
       (clientFolder ? 'Change CoA folder' : 'Select local CoA folder') + '</button>' +
       (clientFolder ? ' <button class="btn small" id="mailInspectCoA" type="button">Inspect client DBC</button>' : '') +
@@ -113,7 +113,7 @@
       '</p></div>' +
       preview + '<div class="mail-model-frame" id="mailModelFrame"><div class="mail-model-empty">' +
       (selected ? 'Loading 3D preview…' : 'Choose an item to preview') + '</div></div>' +
-      '<p class="meta">3D previews load from your configured local model directory. Models must be exported to GLB once; no cloud model service is required.</p>' +
+      '<p class="meta">' + (characterMode ? 'Character models and armor require the server-hosted WotLK asset library.' : 'Experimental item models read converted local GLBs or selected client MPQs.') + '</p>' +
       '</section></div>';
   }
   let modelSeq = 0;
@@ -131,7 +131,7 @@
     try {
       const response = await fetch('/api/model-available?display=' + id, {cache:'no-store'});
       const result = await response.json();
-      if (seq !== modelSeq || !$('mailModelFrame')) return;
+      if (characterMode || seq !== modelSeq || frame !== $('mailModelFrame')) return;
       if (!response.ok) throw Error(result.error || 'Unable to check model library');
       if (!result.available) {
         if (clientFolder) {
@@ -146,7 +146,7 @@
         customElements.whenDefined('model-viewer'),
         new Promise((_, reject) => setTimeout(() => reject(Error('3D viewer script could not load')), 12000))
       ]);
-      if (seq !== modelSeq || !$('mailModelFrame')) return;
+      if (characterMode || seq !== modelSeq || frame !== $('mailModelFrame')) return;
       const viewer = document.createElement('model-viewer');
       viewer.setAttribute('src', '/static/models/' + id + '.glb');
       viewer.setAttribute('camera-controls', '');
@@ -155,11 +155,11 @@
       viewer.setAttribute('alt', '3D model for ' + item.name);
       viewer.style.cssText = 'width:100%;height:410px;min-height:410px;display:block;';
       viewer.addEventListener('error', () => {
-        if(seq === modelSeq) frame.textContent = 'Model could not be loaded. Check the GLB export.';
+        if(!characterMode && seq === modelSeq && frame === $('mailModelFrame')) frame.textContent = 'Model could not be loaded. Check the GLB export.';
       });
       frame.replaceChildren(viewer);
     } catch (error) {
-      if (seq === modelSeq && $('mailModelFrame'))
+      if (!characterMode && seq === modelSeq && frame === $('mailModelFrame'))
         frame.textContent = '3D viewer error: ' + error.message;
     }
   }
@@ -195,12 +195,12 @@
   }
   async function renderCharacterPreview(item){
     const seq=++characterSeq,frame=$('mailModelFrame');
-    if(!frame)return;
+    if(!frame || !characterMode)return;
     if(characterModel){try{characterModel.destroy();}catch(e){}characterModel=null;}
     frame.textContent='Loading 3D character viewer…';
     try{
       const lib=await loadCharacterViewer();
-      if(seq!==characterSeq||!$('mailModelFrame'))return;
+      if(!characterMode || seq!==characterSeq || frame!==$('mailModelFrame'))return;
       if(item){
         const slot=equipmentSlot(item);
         if(!slot)throw Error('This item has no supported equipment slot. Choose a weapon or armor piece.');
@@ -209,50 +209,50 @@
       }
       frame.innerHTML='<div id="coaCharacterCanvas" style="height:420px;width:100%;"></div>';
       const model=await lib.generateModels(1,'#coaCharacterCanvas',{...characterAppearance,hideProgressBar:true});
-      if(seq!==characterSeq){try{model?.destroy();}catch(e){}return;}
+      if(!characterMode || seq!==characterSeq || frame!==$('mailModelFrame')){try{model?.destroy();}catch(e){}return;}
       characterModel=model;
-    }catch(e){if(seq===characterSeq&&$('mailModelFrame'))$('mailModelFrame').textContent='3D character unavailable: '+e.message;}
+    }catch(e){if(characterMode && seq===characterSeq && frame===$('mailModelFrame'))frame.textContent='3D character unavailable: '+e.message;}
   }
   let appearanceSeq = 0, appearanceCache = new Map();
   async function lookupNativeAppearance(item) {
     const seq = ++appearanceSeq;
     const frame = $('mailModelFrame');
-    if(!clientFolder || !frame || !item)return;
+    if(characterMode || !clientFolder || !frame || !item)return;
     const id = Number(item.displayId);
     if(appearanceCache.has(id)){
       const result=appearanceCache.get(id);
       frame.textContent = 'Opening cached CoA model…';
       try{await showNativeMesh(item,result,seq);}
-      catch(error){if(seq===appearanceSeq && $('mailModelFrame'))$('mailModelFrame').textContent='Model '+(result.model1||result.model2)+': '+error.message;}
+      catch(error){if(!characterMode && seq===appearanceSeq && frame===$('mailModelFrame'))$('mailModelFrame').textContent='Model '+(result.model1||result.model2)+': '+error.message;}
       return;
     }
     try {
       const {resolveCoADisplay} = await import('/static/client-mpq.js');
       const result = await resolveCoADisplay(clientFolder,id,msg=>{
-        if(seq===appearanceSeq && $('mailModelFrame')) $('mailModelFrame').textContent=msg;
+        if(!characterMode && seq===appearanceSeq && frame===$('mailModelFrame')) $('mailModelFrame').textContent=msg;
       });
-      if(seq!==appearanceSeq || !$('mailModelFrame'))return;
+      if(characterMode || seq!==appearanceSeq || frame!==$('mailModelFrame'))return;
       appearanceCache.set(id,result);
       $('mailModelFrame').textContent='Opening native M2 geometry…';
       try{await showNativeMesh(item,result,seq);}
-      catch(error){if(seq===appearanceSeq && $('mailModelFrame'))$('mailModelFrame').textContent=
+      catch(error){if(!characterMode && seq===appearanceSeq && frame===$('mailModelFrame'))$('mailModelFrame').textContent=
         'Model found: '+(result.model1||result.model2)+'. Renderer: '+error.message;}
     }catch(error){
-      if(seq===appearanceSeq && $('mailModelFrame'))$('mailModelFrame').textContent='Client appearance lookup: '+error.message;
+      if(!characterMode && seq===appearanceSeq && frame===$('mailModelFrame'))$('mailModelFrame').textContent='Client appearance lookup: '+error.message;
     }
   }
   let activeMeshViewer = null;
   async function showNativeMesh(item, result, seq) {
     const frame = $('mailModelFrame');
-    if(!frame || seq!==appearanceSeq)return;
+    if(characterMode || !frame || seq!==appearanceSeq)return;
     const {loadCoAMesh}=await import('/static/client-mpq.js');
     const mesh=await loadCoAMesh(clientFolder,result,msg=>{
-      if(seq===appearanceSeq && $('mailModelFrame'))$('mailModelFrame').textContent=msg;
+      if(!characterMode && seq===appearanceSeq && frame===$('mailModelFrame'))$('mailModelFrame').textContent=msg;
     });
-    if(seq!==appearanceSeq || !$('mailModelFrame'))return;
+    if(characterMode || seq!==appearanceSeq || frame!==$('mailModelFrame'))return;
     const THREE=await import('https://esm.sh/three@0.170.0');
     const {OrbitControls}=await import('https://esm.sh/three@0.170.0/examples/jsm/controls/OrbitControls.js');
-    if(seq!==appearanceSeq || !$('mailModelFrame'))return;
+    if(characterMode || seq!==appearanceSeq || frame!==$('mailModelFrame'))return;
     frame.replaceChildren();
     const canvas=document.createElement('canvas');
     canvas.style.cssText='height:410px;width:100%;display:block;touch-action:none;';
@@ -291,6 +291,12 @@
     const values = ['mailSubject','mailBody','mailGold'].map(id=>$(id)?.value);
     recipient = $("mailRecipient")?.value || recipient;
     query = $("mailSearch")?.value ?? query;
+    // Cancel async operations associated with the old preview DOM.
+    ++appearanceSeq;
+    ++modelSeq;
+    ++characterSeq;
+    if(activeMeshViewer){activeMeshViewer();activeMeshViewer=null;}
+    if(characterModel){try{characterModel.destroy();}catch(e){}characterModel=null;}
     draw();
     updateModel();
     ['mailSubject','mailBody','mailGold'].forEach((id,i)=>{if(values[i]!==undefined && $(id))$(id).value=values[i];});
