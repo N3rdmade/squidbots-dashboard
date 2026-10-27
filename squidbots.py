@@ -1674,7 +1674,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         "folderExists": os.path.isdir(folder)})
         elif re.fullmatch(r"/wotlk-model-data/[A-Za-z0-9_./-]{1,220}", path):
             folder = os.path.realpath(os.path.expanduser(
-                SETTINGS.get("wotlkViewerDir") or os.path.join(HERE, "wotlk-model-data")))
+                SETTINGS.get("wotlkViewerDir") or os.path.join(os.path.expanduser("~"), "coa-server", "assets", "wotlk-model-data")))
             target = os.path.realpath(os.path.join(folder, path[len("/wotlk-model-data/"):]))
             if not target.startswith(folder + os.sep) or not os.path.isfile(target):
                 self.send_error(404)
