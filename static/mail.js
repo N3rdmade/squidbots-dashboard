@@ -50,9 +50,10 @@
   let characterModel=null, characterViewerPromise=null, characterSeq=0;
   const characterAppearance={race:1,gender:1,skin:0,face:0,hairStyle:0,hairColor:0,facialStyle:0,items:[]};
   const equipmentSlot = item => {
-    // InventoryType is required for assigning a correct paper-doll slot.
+    // InventoryType enumerations from WoW 3.3.5, not character inventory indices.
     const type=Number(item.inventoryType);
-    return ({1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,11:11,12:13,13:21,14:22,15:15,16:15,17:21,18:18,19:19,20:20,21:21,22:22,23:22,25:18,26:18})[type]||0;
+    return ({1:1,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,
+      13:21,14:14,15:15,16:16,17:17,19:19,20:20,21:21,22:22,23:23,25:25,26:26})[type]||0;
   };
   let viewerStage='initialization';
   async function loadCharacterViewer() {
