@@ -1552,7 +1552,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     # read the answers (DNS rebinding). So every request must name this server in Host, and a
     # write must also come from this page (Origin) with a JSON body, which no form can send.
     def _allowed_hosts(self):
-        return {"%s:%d" % (name, PORT) for name in ("127.0.0.1", "localhost", "[::1]")}
+        return {"%s:%d" % (name, port) for name in ("127.0.0.1", "localhost", "[::1]") for port in ({PORT} | {int(p) for p in SETTINGS.get("tunnelPorts", []) if str(p).isdigit() and 1 <= int(p) <= 65535})}
 
     def _own_host(self):
         if (self.headers.get("Host") or "").lower() in self._allowed_hosts():
