@@ -104,4 +104,5 @@
     if(e.target.closest('#mailSendGold'))send('money');
   });
   window.showMailPage=()=>{if(!$("mailPage"))return;draw();loadPlayers();};
+  if (location.hash.split("/")[0] === "#mail") window.showMailPage();
 })();
