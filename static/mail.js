@@ -45,7 +45,7 @@
       '<button class="btn small" id="mailClearPreview" type="button">Clear equipment</button>' +
       preview + '<div class="mail-model-frame" id="mailModelFrame"><div class="mail-model-empty">' +
       (selected ? 'Loading 3D preview…' : 'Choose an item to preview') + '</div></div>' +
-      '<p class="meta">Character models and armor use the server-hosted WotLK asset library.</p>' +
+      '<div id="mailViewerNotes"><p class="meta">Character models and armor use the server-hosted WotLK asset library.</p></div>' +
       '</section></div>';
   }
   let characterModel=null, characterViewerPromise=null, characterSeq=0;
@@ -136,13 +136,15 @@
         if(seq!==characterSeq || frame!==$('mailModelFrame'))return;
         const message=document.createElement('p');
         message.className='meta';
-        message.style.cssText='padding:6px 8px;margin:4px 0;';
+        message.style.cssText='margin:8px 0 0;padding:8px 0;overflow-wrap:anywhere;';
         const found=checks.find(x=>x.status===200 && x.type.includes('json'));
         message.textContent=found?
-          'Armor metadata present for display '+item.displayId+'. If gear remains invisible, model geometry/texture requests need checking.':
-          'Equipment metadata missing for display '+item.displayId+' (HTTP '+checks.map(x=>x.status).join('/')+
-          '). The WotLK asset package may not contain this appearance.';
-        frame.appendChild(message);
+          'Appearance metadata exists for display '+item.displayId+
+          '. If the item is invisible, its actual model or texture files may be missing.':
+          'No WotLK equipment appearance data for display ID '+item.displayId+
+          '. The base character can load, but the selected gear cannot be rendered with this asset library.';
+        const notes=document.getElementById('mailViewerNotes');
+        if(notes)notes.replaceChildren(message);
       }
     }catch(e){if(seq===characterSeq && frame===$('mailModelFrame'))frame.textContent='3D character unavailable during '+viewerStage+': '+e.message;}
   }
