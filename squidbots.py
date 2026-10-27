@@ -1664,34 +1664,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         "source": ctx.db["world"] + ".item_template"}
             status, payload = answer_or_error(item_results)
             self._json(payload, status)
-        elif path == "/api/character-viewer-config":
-            folder = os.path.realpath(os.path.expanduser(
-                SETTINGS.get("wotlkViewerDir") or os.path.join(os.path.expanduser("~"), "coa-server", "assets", "wotlk-model-data")))
-            expected = os.path.join(folder, "meta", "charactercustomization2", "1_1.json")
-            ready = os.path.isfile(expected)
-            self._json({"ready": ready, "configured": bool(SETTINGS.get("wotlkViewerDir")),
-                        "missing": "" if ready else "meta/charactercustomization2/1_1.json",
-                        "folderExists": os.path.isdir(folder)})
-        elif re.fullmatch(r"/wotlk-model-data/[A-Za-z0-9_./-]{1,220}", path):
-            folder = os.path.realpath(os.path.expanduser(
-                SETTINGS.get("wotlkViewerDir") or os.path.join(os.path.expanduser("~"), "coa-server", "assets", "wotlk-model-data")))
-            target = os.path.realpath(os.path.join(folder, path[len("/wotlk-model-data/"):]))
-            if not target.startswith(folder + os.sep) or not os.path.isfile(target):
-                self.send_error(404)
-                return
-            # Local 3D data is served only via the private Handler, not the LAN handler.
-            content_types = {".js":"application/javascript", ".json":"application/json",
-                             ".bin":"application/octet-stream", ".png":"image/png",
-                             ".jpg":"image/jpeg", ".jpeg":"image/jpeg",
-                             ".webp":"image/webp", ".blp":"application/octet-stream",
-                             ".m2":"application/octet-stream", ".skin":"application/octet-stream",
-                             ".mo3":"application/octet-stream"}
-            kind = content_types.get(os.path.splitext(target)[1].lower(), "application/octet-stream")
-            if os.path.getsize(target) > 64*1024*1024:
-                self.send_error(413)
-                return
-            with open(target, "rb") as handle:
-                self._send(handle.read(), kind)
         elif path == "/api/model-mode":
             self._json({"mode": "local", "configured": os.path.isdir(MODEL_DIR)})
         elif path == "/api/model-available":
