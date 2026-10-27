@@ -362,6 +362,9 @@ function gmActionsHtml(p) {
     '<div class="gm-row"><button class="btn small" data-gm="kick">' + esc(words.gmKick) + '</button><button class="btn small" data-gm="revive">' + esc(words.gmRevive) + "</button></div>" +
     '<div class="gm-row"><span class="gm-what">' + esc(words.gmUnstuck) + '</span><button class="btn small" data-gm="unstuck" data-where="inn">' + esc(words.gmInn) +
       '</button><button class="btn small" data-gm="unstuck" data-where="graveyard">' + esc(words.gmGraveyard) + '</button><button class="btn small" data-gm="unstuck" data-where="startzone">' + esc(words.gmStart) + "</button></div>" +
+    '<div class="gm-row"><label for="gmDestination">Teleport to city</label><select id="gmDestination"><option value="">Select city</option>' +
+      (GMDATA.teleports || []).map(name => '<option value="' + esc(name) + '">' + esc(name) + '</option>').join("") +
+      '</select><button class="btn small" data-gm="teleport">Teleport player</button></div>' +
     '<div class="gm-row">' + field("gmMinutes", words.gmMinutes, "number", ' min="1" max="10080" value="15"') + field("gmMuteReason", words.gmReason) +
       '<button class="btn small" data-gm="mute">' + esc(words.gmMute) + '</button><button class="btn small" data-gm="unmute">' + esc(words.gmUnmute) + "</button></div>" +
     '<div class="gm-row">' + field("gmLevelValue", words.gmLevel, "number", ' min="1" max="80" value="' + p.level + '"') + '<button class="btn small" data-gm="level">' + esc(words.gmSetLevel) + "</button></div>" +
@@ -375,7 +378,7 @@ function gmActionsHtml(p) {
     '<p class="gm-result" id="gmPickResult"></p>';
 }
 
-const GM_CONFIRM = ["kick", "ban", "gmlevel", "level", "money", "items", "mute"];
+const GM_CONFIRM = ["teleport", "kick", "ban", "gmlevel", "level", "money", "items", "mute"];
 document.addEventListener("click", async event => {
   const mail = event.target.closest("[data-mail-search], [data-mail-add], [data-mail-remove], [data-mail-send], [data-mail-gold]");
   if (mail) {
@@ -445,6 +448,7 @@ document.addEventListener("click", async event => {
   const body = { action: action, guid: pick.guid, account: pick.account };
   if (action === "announce" || action === "notify") body.text = value("gmText");
   if (action === "unstuck") body.where = button.dataset.where;
+  if (action === "teleport") { body.destination = value("gmDestination"); body.character = pick.name; if (!body.destination) { window.alert("Choose a city first."); return; } }
   if (action === "mute") { body.minutes = value("gmMinutes"); body.reason = value("gmMuteReason"); }
   if (action === "level") body.level = value("gmLevelValue");
   if (action === "money") body.gold = value("gmGoldValue");
