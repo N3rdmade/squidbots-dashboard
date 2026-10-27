@@ -44,61 +44,48 @@
       '<section class="card mail-preview"><div class="mail-heading"><h2>Item Preview</h2><span class="meta">3D model workspace</span></div>' +
       preview + '<div class="mail-model-frame" id="mailModelFrame"><div class="mail-model-empty">' +
       (selected ? 'Loading 3D preview…' : 'Choose an item to preview') + '</div></div>' +
-      '<p class="meta">3D preview uses the online WoW model service. Standard appearances may load; custom CoA models may not be available.</p>' +
+      '<p class="meta">3D previews load from your configured local model directory. Models must be exported to GLB once; no cloud model service is required.</p>' +
       '</section></div>';
   }
-  let modelSeq = 0, activeZamModel = null, zamLibraryPromise = null;
-  // CoA display IDs are not item entry IDs; use the display ID from the database.
-  function loadZamLibrary(){
-    if(!zamLibraryPromise){
-      zamLibraryPromise=(async()=>{
-        // ZamModelViewer needs jQuery to exist before viewer.min.js executes.
-        if(!window.jQuery){
-          await new Promise((resolve,reject)=>{
-            const jq=document.createElement('script');
-            jq.src='https://code.jquery.com/jquery-3.5.1.min.js';
-            jq.onload=resolve;
-            jq.onerror=()=>reject(Error('jQuery dependency could not load'));
-            document.head.appendChild(jq);
-          });
-        }
-        window.CONTENT_PATH='https://wow.zamimg.com/modelviewer/live/';
-        window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;
-        if(!document.querySelector('script[data-zam-viewer]')){
-          await new Promise((resolve,reject)=>{
-            const el=document.createElement('script');
-            el.src='https://wow.zamimg.com/modelviewer/live/viewer/viewer.min.js';
-            el.dataset.zamViewer='1';
-            el.onload=()=>window.ZamModelViewer?resolve():reject(Error('ZAM viewer script loaded without ZamModelViewer'));el.onerror=()=>reject(Error('ZAM renderer could not load'));
-            document.head.appendChild(el);
-          });
-        }
-        if(!window.ZamModelViewer)throw Error('ZamModelViewer is not defined after loading its script');
-        return import('https://esm.sh/wow-model-viewer@1.5.1?bundle');
-      })().catch(error=>{zamLibraryPromise=null;throw error;});
+  let modelSeq = 0;
+  async function updateModel() {
+    const frame = $('mailModelFrame'), item = selected, seq = ++modelSeq;
+    if (!frame || !item) return;
+    const id = Number(item.displayId);
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      frame.textContent = 'This item has no valid 3D display ID.';
+      return;
     }
-    return zamLibraryPromise;
-  }
-  async function updateModel(){
-    const target=$('mailModelFrame'),item=selected,seq=++modelSeq;
-    if(!target||!item)return;
-    if(activeZamModel){try{activeZamModel.destroy();}catch(e){}activeZamModel=null;}
-    const id=Number(item.displayId);
-    if(!Number.isSafeInteger(id)||id<=0){target.textContent='This item has no 3D display ID.';return;}
-    target.textContent='Loading 3D preview…';
-    try{
-      const lib=await loadZamLibrary();
-      if(seq!==modelSeq||!$('mailModelFrame'))return;
-      target.replaceChildren();
-      const container=document.createElement('div');container.id='coaZamModel';
-      container.style.cssText='width:100%;height:410px;min-height:410px;';
-      target.appendChild(container);
-      const model=await lib.generateModels(1,'#coaZamModel',{type:1,id});
-      if(seq!==modelSeq){try{model?.destroy();}catch(e){}return;}
-      activeZamModel=model;
-    }catch(error){
-      if(seq!==modelSeq||!$('mailModelFrame'))return;
-      target.textContent='3D preview unavailable: '+(error?.message||'ZAM asset lookup failed')+'. Some custom CoA appearances are not hosted by ZAM.';
+    frame.textContent = 'Checking local model library…';
+    try {
+      const response = await fetch('/api/model-available?display=' + id, {cache:'no-store'});
+      const result = await response.json();
+      if (seq !== modelSeq || !$('mailModelFrame')) return;
+      if (!response.ok) throw Error(result.error || 'Unable to check model library');
+      if (!result.available) {
+        frame.textContent = 'No converted local 3D model for display ID ' + id +
+          '. Import a GLB model for this appearance using the asset setup guide.';
+        return;
+      }
+      await Promise.race([
+        customElements.whenDefined('model-viewer'),
+        new Promise((_, reject) => setTimeout(() => reject(Error('3D viewer script could not load')), 12000))
+      ]);
+      if (seq !== modelSeq || !$('mailModelFrame')) return;
+      const viewer = document.createElement('model-viewer');
+      viewer.setAttribute('src', '/static/models/' + id + '.glb');
+      viewer.setAttribute('camera-controls', '');
+      viewer.setAttribute('auto-rotate', '');
+      viewer.setAttribute('shadow-intensity', '1');
+      viewer.setAttribute('alt', '3D model for ' + item.name);
+      viewer.style.cssText = 'width:100%;height:410px;min-height:410px;display:block;';
+      viewer.addEventListener('error', () => {
+        if(seq === modelSeq) frame.textContent = 'Model could not be loaded. Check the GLB export.';
+      });
+      frame.replaceChildren(viewer);
+    } catch (error) {
+      if (seq === modelSeq && $('mailModelFrame'))
+        frame.textContent = '3D viewer error: ' + error.message;
     }
   }
   // Redraw while retaining the composer's unsent text and selected recipient.
