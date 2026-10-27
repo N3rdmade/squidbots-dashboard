@@ -884,3 +884,14 @@ tbody tr:hover td { background: var(--tint); }
 .nav-link .ico { color: var(--text-muted); }
 .nav-link:hover .ico { color: var(--text-primary); }
 .nav-link[aria-current="page"] .ico { color: var(--accent); }
+
+/* CoA management center: item search and mail cart */
+.mail-center { border-top: 1px solid var(--border, rgba(255,255,255,.15)); margin-top: 22px; padding-top: 18px; }
+.mail-center h3 { margin: 0 0 8px; }
+.mail-center h4 { margin: 16px 0 8px; }
+.mail-center .gm-row input[type="search"] { flex: 1 1 200px; min-width: 0; }
+.mail-center textarea { width: 100%; box-sizing: border-box; resize: vertical; background: rgba(0,0,0,.2); color: inherit; border: 1px solid rgba(255,255,255,.2); border-radius: 6px; padding: 9px; }
+.mail-results, .mail-cart { list-style: none; padding: 0; margin: 10px 0; max-height: 230px; overflow-y: auto; }
+.mail-results li, .mail-cart li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 8px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.mail-cart input[type="number"] { width: 64px; }
+.mail-center [class^="q"] { flex: 1 1 auto; }
