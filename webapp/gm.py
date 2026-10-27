@@ -90,6 +90,11 @@ def _command(action, body):
         if not re.fullmatch(r"[A-Za-z0-9_]{1,100}", name):
             raise GmError("Select a valid saved teleport destination.")
         return ".teleport name %s %s" % (_text(body.get("character"), 50, "character name"), name)
+    if action == "teleport":
+        name = str(body.get("destination") or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_]{1,100}", name):
+            raise GmError("Select a valid saved teleport destination.")
+        return ".teleport name %s %s" % (_text(body.get("character"), 50, "character name"), name)
     if action == "mute":
         return ".mute %s %d %s" % (target(), _int(body.get("minutes"), 1, 10080, "duration in minutes"),
                                    _text(body.get("reason"), 100, "reason"))
@@ -170,7 +175,17 @@ class Gm:
             destinations = [str(row[0]) for row in found]
         except Exception:
             pass
-        return {"realm": ctx.realm.public(), "console": running, "raPort": ra_port, "players": players, "teleports": destinations,
+        destinations = []
+        try:
+            city_names = ("Stormwind", "Orgrimmar", "Ironforge", "Darnassus", "Exodar",
+                          "ThunderBluff", "Undercity", "Silvermoon", "Shattrath", "Dalaran",
+                          "BootyBay", "Gadgetzan", "Ratchet", "Everlook")
+            names = ",".join("\'%s\'" % n for n in city_names)
+            found = self.query("SELECT name FROM {world}.game_tele WHERE name IN ({names}) ORDER BY name".format(world=db["world"], names=names))
+            destinations = [str(row[0]) for row in found]
+        except Exception:
+            pass
+        return {"realm": ctx.realm.public(), "console": running, "raPort": ra_port, "players": players, "teleports": destinations, "teleports": destinations,
                 "journal": self.recent(ctx.realm.key)}
 
     def run(self, ctx, ra_port, body):
