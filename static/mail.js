@@ -91,9 +91,17 @@
       const lib=await loadCharacterViewer();
       if(seq!==characterSeq || frame!==$('mailModelFrame'))return;
       const slot=item?equipmentSlot(item):0;
-      if(item && !slot)throw Error('This item does not have a visible equipment slot.');
-      // Preview exactly one item, clearing previously equipped pieces.
-      characterAppearance.items=item?[[slot,Number(item.displayId)]]:[];
+      if(item && !slot)throw Error('This item has no visible equipment slot.');
+      // The viewer's WotLK mapping handles armor remaps (chest/robe and
+      // equipped weapon attachment IDs), including optional armor metadata.
+      let displaySlot=slot;
+      if(item){
+        viewerStage='Resolving WotLK equipment slot';
+        const mapped=await lib.getDisplaySlot(Number(item.id),slot,Number(item.displayId));
+        displaySlot=Number(mapped?.displaySlot ?? slot);
+        if(seq!==characterSeq || frame!==$('mailModelFrame'))return;
+      }
+      characterAppearance.items=item?[[displaySlot,Number(item.displayId)]]:[];
       frame.innerHTML='<div id="coaCharacterCanvas" style="height:420px;width:100%;"></div>';
       viewerStage='Checking WotLK character customization data';
       const metaPath='/wotlk-model-data/meta/charactercustomization2/' +
