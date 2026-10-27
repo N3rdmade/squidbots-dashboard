@@ -116,11 +116,12 @@ class Monitor:
         """The realm's worldserver pid: the one the launcher or manage.py recorded, when it is still a worldserver;
         for the CoA realm without a record, the worldserver of this repack that no other realm claims."""
         pid = realm.pid()
-        if pid and procinfo.path_of(pid).lower().endswith("worldserver.exe"):
+        if pid and os.path.basename(procinfo.path_of(pid)).lower() in ("worldserver.exe", "worldserver"):
             return pid
         if realm.key != "coa":
             return 0
-        running = procinfo.find("worldserver.exe")
+        running = dict(procinfo.find("worldserver.exe"))
+        running.update(procinfo.find("worldserver"))
         if self.coa_exe:
             for candidate, path in running.items():
                 if path.lower() == self.coa_exe:
