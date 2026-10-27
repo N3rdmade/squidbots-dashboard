@@ -168,10 +168,9 @@
     const id = Number(item.displayId);
     if(appearanceCache.has(id)){
       const result=appearanceCache.get(id);
-      frame.textContent = 'CoA appearance found in '+result.archive +
-        '. Model: '+(result.model1||'(no standalone model)') +
-        (result.model2?' / '+result.model2:'')+
-        '. Native M2 rendering is not yet connected.';
+      frame.textContent = 'Opening cached CoA model…';
+      try{await showNativeMesh(item,result,seq);}
+      catch(error){if(seq===appearanceSeq && $('mailModelFrame'))$('mailModelFrame').textContent='Model '+(result.model1||result.model2)+': '+error.message;}
       return;
     }
     try {
