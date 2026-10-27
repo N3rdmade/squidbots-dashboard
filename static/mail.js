@@ -179,13 +179,14 @@
           document.head.append(script);
         });
       }
-      // Check the actual model-data file directly. This avoids SPA/proxy HTML
-      // fallback responses at /api/character-viewer-config.
-      const probe=await fetch('/wotlk-model-data/listfile.json',{method:'HEAD',cache:'no-store'});
-      if(!probe.ok || (probe.headers.get('content-type')||'').includes('text/html')){
-        throw Error('Local WotLK model data is not being served (HTTP '+probe.status+
-          '). The viewer requires the matching WotLK data pack on Ubuntu.');
-      }
+      const response=await fetch('/api/character-viewer-config',{cache:'no-store'});
+      const raw=await response.text();
+      let config;
+      try{config=JSON.parse(raw);}
+      catch(e){throw Error('Viewer configuration endpoint returned HTML (HTTP '+response.status+
+          '). The running Ubuntu dashboard has not loaded the new route; restart only squidbots-test.');}
+      if(!response.ok)throw Error(config.error||'Viewer configuration HTTP '+response.status);
+      if(!config.ready)throw Error('The WotLK model-data package is missing on Ubuntu. See WOTLK_VIEWER_SETUP.md.');
       window.CONTENT_PATH='/wotlk-model-data/';
       window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;
       return import('https://esm.sh/wotlk-model-viewer@1.1.9?bundle');
