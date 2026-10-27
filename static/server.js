@@ -366,7 +366,7 @@ function gmActionsHtml(p) {
       '<button class="btn small" data-gm="mute">' + esc(words.gmMute) + '</button><button class="btn small" data-gm="unmute">' + esc(words.gmUnmute) + "</button></div>" +
     '<div class="gm-row">' + field("gmLevelValue", words.gmLevel, "number", ' min="1" max="80" value="' + p.level + '"') + '<button class="btn small" data-gm="level">' + esc(words.gmSetLevel) + "</button></div>" +
     '<div class="gm-row">' + field("gmGoldValue", "or / gold", "number", ' min="1" max="100000" value="100"') + '<button class="btn small" data-gm="money">' + esc(words.gmGold) + "</button></div>" +
-    gmMailHtml() +
+    "" +
     '<div class="gm-row danger">' + field("gmBanDuration", words.gmDuration, "text", ' value="1d"') + field("gmBanReason", words.gmReason) +
       '<button class="btn small" data-gm="ban">' + esc(words.gmBan) + '</button><button class="btn small" data-gm="unban">' + esc(words.gmUnban) + "</button></div>" +
     '<div class="gm-row danger"><select id="gmLevelGm" aria-label="' + esc(words.gmGmLevel) + '">' + words.gmGmLevels.map((label, i) =>
