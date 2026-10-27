@@ -1109,7 +1109,7 @@ def context(key):
 MONITOR = monitor.Monitor(REALMS, ROOT, lambda key: live_count(context(key)),
                           every=int(SETTINGS.get("monitorEvery", 60)), coa_exe=SETTINGS.get("worldserverPath"),
                           use_ra=SETTINGS.get("console", True) is not False)
-GM = gm.Gm(ROOT, mysql, os.path.join(HERE, "data", "gm-actions.jsonl"))
+GM = gm.Gm(ROOT, mysql, os.path.join(HERE, "data", "gm-actions.jsonl"), SETTINGS)
 # The server's settings belong to the launcher, which builds every .conf file again at each start: the dashboard
 # only reads them, unless dashboard.json asks for its own Settings page (a server run without the launcher).
 CONFIG_EDIT = SETTINGS.get("settingsPage") is True
