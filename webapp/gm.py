@@ -144,8 +144,9 @@ ACTIONS = ("announce", "notify", "saveall", "kick", "revive", "unstuck", "mute",
 
 
 class Gm:
-    def __init__(self, root, query, journal):
+    def __init__(self, root, query, journal, settings=None):
         self.root, self.query, self.journal = root, query, journal
+        self.settings = settings or {}
         self.lock = threading.Lock()
 
     def overview(self, ctx, ra_port, running):
@@ -192,7 +193,8 @@ class Gm:
         action = str(body.get("action") or "")
         command = _command(action, body)
         try:
-            answer, ok = ra.command(self.root, ra_port, command, timeout=12), True
+            answer, ok = ra.command(self.root, ra_port, command, timeout=12,
+                username=self.settings.get("raUsername"), password=self.settings.get("raPassword")), True
         except ra.RaError as error:
             answer, ok = str(error), False
         # A refused command answers with the core's own message; the console has no exit code to read.
