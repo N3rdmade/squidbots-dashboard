@@ -1741,7 +1741,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-        elif re.fullmatch(r"/static/models/[0-9]{1,10}\\.glb", path):
+        elif re.fullmatch(r"/static/models/[0-9]{1,10}\.glb", path):
             file = os.path.join(MODEL_DIR, path.rsplit("/", 1)[-1])
             if not os.path.isfile(file):
                 self.send_error(404)
