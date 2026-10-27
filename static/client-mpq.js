@@ -111,7 +111,7 @@ function geometryFromM2(m2,skin){
   if(magic!=='MD20')throw Error('Unsupported model magic '+magic);
   const version=u32(m,4);
   if(version<264||version>274)throw Error('Model version '+version+' not yet supported');
-  const count=u32(m,0x44),offset=u32(m,0x48);
+  const count=u32(m,0x3c),offset=u32(m,0x40);
   if(!count||count>150000||offset+count*48>m2.byteLength)throw Error('Invalid M2 vertices');
   if(String.fromCharCode(...skin.subarray(0,4))!=='SKIN')throw Error('Companion SKIN file is invalid');
   const indicesCount=u32(k,4),indicesOffset=u32(k,8);
@@ -139,30 +139,48 @@ function geometryFromM2(m2,skin){
 function normalizeName(name){return name.replace(/\.mdx$/i,'.m2').replace(/\.m2$/i,'');}
 export async function loadCoAMesh(folder, appearance, progress=()=>{}) {
   const base=normalizeName(appearance.model1||appearance.model2||'');
-  if(!base)throw Error('This appearance has no separate 3D mesh.');
+  if(!base)throw Error('This appearance has no standalone mesh.');
   const leaf=base.replace(/^.*[\\/]/,'');
-  const dirs=base.includes('\\')?[base]:modelPrefixes.map(p=>p+leaf);
-  const paths=dirs.flatMap(prefix=>[prefix+'.m2']);
+  const dirs=/[\\/]/.test(base)?[base.replace(/\//g,'\\')]:modelPrefixes.map(p=>p+leaf);
+  const names=dirs.map(p=>p+'.m2');
   const entries=await archivesIn(folder),{MpqArchive}=await mpqLibrary();
-  let failures=0,tooLarge=0;
+  const selection={m2:null,skin:null,modelPath:'',archives:[]};
+  let failures=0,tooLarge=0,matched=0;
+  // Each file is independently looked up across all MPQs: models and skins can
+  // reside in different patches. Do not give up when one archive lacks the skin.
   for(const entry of entries){
+    if(selection.m2&&selection.skin)break;
     const file=await entry.handle.getFile();
     if(file.size>400*1024*1024){tooLarge++;continue;}
     let archive;
     try{
-      progress('Searching '+entry.name+' for '+leaf+'…');
+      progress('Searching '+entry.name+' for model and skin…');
       archive=MpqArchive.openFromBuffer(await file.arrayBuffer());
-      for(const path of paths){
-        if(!archive.hasFile(path))continue;
-        const skinPath=path.replace(/\.m2$/i,'00.skin');
-        if(!archive.hasFile(skinPath))continue;
-        const m2data=archive.extractFile(path),skindata=archive.extractFile(skinPath);
-        const m2=m2data instanceof Uint8Array?m2data:new Uint8Array(m2data);
-        const skin=skindata instanceof Uint8Array?skindata:new Uint8Array(skindata);
-        return {...geometryFromM2(m2,skin),archive:entry.path,modelPath:path};
+      for(const name of names){
+        const skinName=name.replace(/\.m2$/i,'00.skin');
+        if(!selection.m2 && archive.hasFile(name)){
+          const buf=archive.extractFile(name);
+          selection.m2=buf instanceof Uint8Array?buf:new Uint8Array(buf);
+          selection.modelPath=name;
+          selection.archives.push(entry.path);
+          matched++;
+        }
+        if(!selection.skin && archive.hasFile(skinName)){
+          const buf=archive.extractFile(skinName);
+          selection.skin=buf instanceof Uint8Array?buf:new Uint8Array(buf);
+          selection.archives.push(entry.path);
+          matched++;
+        }
+        if(selection.m2&&selection.skin)break;
       }
-    }catch(e){failures++;}finally{if(archive)archive.close();}
+    }catch(e){failures++}finally{if(archive)archive.close();}
   }
-  throw Error('M2 and companion 00.skin not found in same readable archive ('+
-    tooLarge+' MPQs skipped over 400 MB; '+failures+' read failures). Multi-archive overrides and texture decoding are not yet handled.');
+  if(selection.m2&&selection.skin)
+    return {...geometryFromM2(selection.m2,selection.skin),
+      archive:selection.archives.join(', '),modelPath:selection.modelPath};
+  throw Error('Searched '+entries.length+' archives; found '+matched+'/2 model components. '+
+    tooLarge+' archives over the 400 MB browser memory limit were not inspected; '+
+    failures+' read failures. '+(!selection.m2?'M2 missing. ':'')+
+    (!selection.skin?'00.skin missing. ':'')+
+    'Large MPQs require a streaming reader.');
 }
