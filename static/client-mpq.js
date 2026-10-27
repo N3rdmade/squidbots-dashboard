@@ -96,3 +96,73 @@ export async function inspectCoAClient(folder,progress=()=>{}) {
   throw Error('ItemDisplayInfo.dbc was not found in '+entries.length+' archives ('+skipped+
     ' too large for browser-memory scan; '+errors+' failed). This is not a 3D renderer.');
 }
+
+
+// Resolve WoW weapon models by their known client path, read M2 vertices and
+// the companion Skin file, and return a standalone mesh (static bind pose).
+const modelPrefixes = ['Item\\ObjectComponents\\Weapon\\','Item\\ObjectComponents\\Shield\\',
+  'Item\\ObjectComponents\\Head\\','Item\\ObjectComponents\\Shoulder\\',
+  'Item\\ObjectComponents\\Misc\\','World\\Generic\\'];
+const u32=(dv,pos)=>dv.getUint32(pos,true);
+function geometryFromM2(m2,skin){
+  const m=new DataView(m2.buffer,m2.byteOffset,m2.byteLength);
+  const k=new DataView(skin.buffer,skin.byteOffset,skin.byteLength);
+  const magic=String.fromCharCode(...m2.subarray(0,4));
+  if(magic!=='MD20')throw Error('Unsupported model magic '+magic);
+  const version=u32(m,4);
+  if(version<264||version>274)throw Error('Model version '+version+' not yet supported');
+  const count=u32(m,0x44),offset=u32(m,0x48);
+  if(!count||count>150000||offset+count*48>m2.byteLength)throw Error('Invalid M2 vertices');
+  if(String.fromCharCode(...skin.subarray(0,4))!=='SKIN')throw Error('Companion SKIN file is invalid');
+  const indicesCount=u32(k,4),indicesOffset=u32(k,8);
+  const trisCount=u32(k,12),trisOffset=u32(k,16);
+  if(indicesCount>250000||trisCount>700000||
+     indicesOffset+indicesCount*2>skin.byteLength||
+     trisOffset+trisCount*2>skin.byteLength||trisCount%3)throw Error('Invalid skin geometry indices');
+  const positions=new Float32Array(count*3),normals=new Float32Array(count*3),uvs=new Float32Array(count*2);
+  for(let i=0;i<count;i++){
+    const p=offset+i*48;
+    positions[i*3]=m.getFloat32(p,true);positions[i*3+1]=m.getFloat32(p+4,true);positions[i*3+2]=m.getFloat32(p+8,true);
+    normals[i*3]=m.getFloat32(p+20,true);normals[i*3+1]=m.getFloat32(p+24,true);normals[i*3+2]=m.getFloat32(p+28,true);
+    uvs[i*2]=m.getFloat32(p+32,true);uvs[i*2+1]=1-m.getFloat32(p+36,true);
+  }
+  const triangles=new Uint32Array(trisCount);
+  for(let i=0;i<trisCount;i++){
+    const reference=k.getUint16(trisOffset+i*2,true);
+    if(reference>=indicesCount)throw Error('SKIN triangle index outside vertex lookups');
+    const idx=k.getUint16(indicesOffset+reference*2,true);
+    if(idx>=count)throw Error('SKIN referenced vertex outside M2');
+    triangles[i]=idx;
+  }
+  return {positions,normals,uvs,triangles,version,vertices:count,faces:trisCount/3};
+}
+function normalizeName(name){return name.replace(/\.mdx$/i,'.m2').replace(/\.m2$/i,'');}
+export async function loadCoAMesh(folder, appearance, progress=()=>{}) {
+  const base=normalizeName(appearance.model1||appearance.model2||'');
+  if(!base)throw Error('This appearance has no separate 3D mesh.');
+  const leaf=base.replace(/^.*[\\/]/,'');
+  const dirs=base.includes('\\')?[base]:modelPrefixes.map(p=>p+leaf);
+  const paths=dirs.flatMap(prefix=>[prefix+'.m2']);
+  const entries=await archivesIn(folder),{MpqArchive}=await mpqLibrary();
+  let failures=0,tooLarge=0;
+  for(const entry of entries){
+    const file=await entry.handle.getFile();
+    if(file.size>400*1024*1024){tooLarge++;continue;}
+    let archive;
+    try{
+      progress('Searching '+entry.name+' for '+leaf+'…');
+      archive=MpqArchive.openFromBuffer(await file.arrayBuffer());
+      for(const path of paths){
+        if(!archive.hasFile(path))continue;
+        const skinPath=path.replace(/\.m2$/i,'00.skin');
+        if(!archive.hasFile(skinPath))continue;
+        const m2data=archive.extractFile(path),skindata=archive.extractFile(skinPath);
+        const m2=m2data instanceof Uint8Array?m2data:new Uint8Array(m2data);
+        const skin=skindata instanceof Uint8Array?skindata:new Uint8Array(skindata);
+        return {...geometryFromM2(m2,skin),archive:entry.path,modelPath:path};
+      }
+    }catch(e){failures++;}finally{if(archive)archive.close();}
+  }
+  throw Error('M2 and companion 00.skin not found in same readable archive ('+
+    tooLarge+' MPQs skipped over 400 MB; '+failures+' read failures). Multi-archive overrides and texture decoding are not yet handled.');
+}
