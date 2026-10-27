@@ -31,6 +31,7 @@
       clientFolder = folder;
       clientFolderName = folder.name;
       clientArchiveCount = count;
+      appearanceCache.clear();
       redraw();
       const message = $('mailClientStatus');
       if (message) {
@@ -129,9 +130,12 @@
       if (seq !== modelSeq || !$('mailModelFrame')) return;
       if (!response.ok) throw Error(result.error || 'Unable to check model library');
       if (!result.available) {
-        frame.textContent = 'No rendered model is available for display ID ' + id + '. ' +
-          (clientFolder ? 'CoA archives selected, but automatic MPQ/M2 model decoding is not yet connected.' :
-            'Select your local CoA folder to prepare for direct client-asset previews.');
+        if (clientFolder) {
+          lookupNativeAppearance(item);
+        } else {
+          frame.textContent = 'No local model file for display ID ' + id +
+            '. Select your CoA folder to identify its original game model.';
+        }
         return;
       }
       await Promise.race([
@@ -263,7 +267,7 @@
     const view=e.target.closest('[data-catalog]');
     if(view){
       const item=items.find(v=>String(v.id)===view.dataset.catalog);
-      if(item){selected=item;redraw();if(clientFolder)lookupNativeAppearance(item);}
+      if(item){selected=item;redraw();}
       return;
     }
     const add=e.target.closest('[data-mail-attach]');
