@@ -120,6 +120,30 @@
       const model=await lib.generateModels(1,'#coaCharacterCanvas',{...characterAppearance,hideProgressBar:true});
       if(seq!==characterSeq || frame!==$('mailModelFrame')){try{model?.destroy();}catch(e){}return;}
       characterModel=model;
+      // Report what the equipment loader actually requested rather than silently
+      // claiming the model is dressed when its armor data is absent.
+      if(item){
+        const urls=[
+          '/wotlk-model-data/meta/armor/'+displaySlot+'/'+Number(item.displayId)+'.json',
+          '/wotlk-model-data/meta/armor/'+slot+'/'+Number(item.displayId)+'.json'
+        ].filter((url,index,array)=>array.indexOf(url)===index);
+        const checks=await Promise.all(urls.map(async url=>{
+          try{
+            const response=await fetch(url,{cache:'no-store'});
+            return {url,status:response.status,type:response.headers.get('content-type')||''};
+          }catch(error){return {url,status:'network error',type:''};}
+        }));
+        if(seq!==characterSeq || frame!==$('mailModelFrame'))return;
+        const message=document.createElement('p');
+        message.className='meta';
+        message.style.cssText='padding:6px 8px;margin:4px 0;';
+        const found=checks.find(x=>x.status===200 && x.type.includes('json'));
+        message.textContent=found?
+          'Armor metadata present for display '+item.displayId+'. If gear remains invisible, model geometry/texture requests need checking.':
+          'Equipment metadata missing for display '+item.displayId+' (HTTP '+checks.map(x=>x.status).join('/')+
+          '). The WotLK asset package may not contain this appearance.';
+        frame.appendChild(message);
+      }
     }catch(e){if(seq===characterSeq && frame===$('mailModelFrame'))frame.textContent='3D character unavailable during '+viewerStage+': '+e.message;}
   }
   // Redraw while retaining the composer's unsent text and selected recipient.
