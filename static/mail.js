@@ -41,7 +41,8 @@
       '<button class="btn" id="mailSendGold" type="button">Send gold</button></div></div>' +
       '<p class="meta">Item attachments and gold are sent in separate messages. A server RA connection is required.</p>' +
       '<p class="gm-result" role="status" id="mailFeedback"></p></section>' +
-      '<section class="card mail-preview"><div class="mail-heading"><h2>Item Preview</h2><span class="meta">3D model workspace</span></div>' +
+      '<section class="card mail-preview"><div class="mail-heading"><h2>Item Preview</h2><span class="meta">3D dressing room</span></div>' +
+      '<button class="btn small" id="mailClearPreview" type="button">Clear equipment</button>' +
       preview + '<div class="mail-model-frame" id="mailModelFrame"><div class="mail-model-empty">' +
       (selected ? 'Loading 3D preview…' : 'Choose an item to preview') + '</div></div>' +
       '<p class="meta">Character models and armor use the server-hosted WotLK asset library.</p>' +
@@ -188,6 +189,7 @@
     if(e.target.id==='mailRecipient') recipient=e.target.value;
   });
   document.addEventListener('click',e=>{
+    if(e.target.closest('#mailClearPreview')) { selected=null;redraw();return; }
     if(e.target.closest('#mailLoadMore')) { loadMore(); return; }
     const view=e.target.closest('[data-catalog]');
     if(view){
@@ -214,6 +216,6 @@
     try {const r=await getJson('/api/item-count');if(!r.error){totalItems=r.total;const el=$('mailDatabaseStatus');if(el)el.textContent=totalItems.toLocaleString()+' items in '+r.source;}}
     catch(e){if($('mailDatabaseStatus'))$('mailDatabaseStatus').textContent='Item database count unavailable';}
   }
-  window.showMailPage=()=>{if(!$("mailPage"))return;draw();loadPlayers();if(!counted){counted=true;countItems();}};
+  window.showMailPage=()=>{if(!$("mailPage"))return;draw();renderCharacterPreview(selected);loadPlayers();if(!counted){counted=true;countItems();}};
   if (location.hash.split("/")[0] === "#mail") window.showMailPage();
 })();
