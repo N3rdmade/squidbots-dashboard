@@ -54,6 +54,7 @@
     const type=Number(item.inventoryType);
     return ({1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,11:11,12:13,13:21,14:22,15:15,16:15,17:21,18:18,19:19,20:20,21:21,22:22,23:22,25:18,26:18})[type]||0;
   };
+  let viewerStage='initialization';
   async function loadCharacterViewer() {
     if(!characterViewerPromise)characterViewerPromise=(async()=>{
       if(!window.jQuery){
@@ -63,6 +64,7 @@
           document.head.append(script);
         });
       }
+      viewerStage='Checking dashboard model-data configuration';
       const response=await fetch('/api/character-viewer-config',{cache:'no-store'});
       const raw=await response.text();
       let config;
@@ -73,6 +75,7 @@
       if(!config.ready)throw Error('The WotLK model-data package is missing on Ubuntu. See WOTLK_VIEWER_SETUP.md.');
       window.CONTENT_PATH='/wotlk-model-data/';
       window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;
+      viewerStage='Loading WotLK viewer library';
       return import('https://esm.sh/wotlk-model-viewer@1.1.9?bundle');
     })().catch(e=>{characterViewerPromise=null;throw e;});
     return characterViewerPromise;
@@ -92,10 +95,11 @@
         characterAppearance.items.push([slot,Number(item.displayId)]);
       }
       frame.innerHTML='<div id="coaCharacterCanvas" style="height:420px;width:100%;"></div>';
+      viewerStage='Loading character assets from the WotLK data package';
       const model=await lib.generateModels(1,'#coaCharacterCanvas',{...characterAppearance,hideProgressBar:true});
       if(seq!==characterSeq || frame!==$('mailModelFrame')){try{model?.destroy();}catch(e){}return;}
       characterModel=model;
-    }catch(e){if(seq===characterSeq && frame===$('mailModelFrame'))frame.textContent='3D character unavailable: '+e.message;}
+    }catch(e){if(seq===characterSeq && frame===$('mailModelFrame'))frame.textContent='3D character unavailable during '+viewerStage+': '+e.message;}
   }
   // Redraw while retaining the composer's unsent text and selected recipient.
   function redraw() {
