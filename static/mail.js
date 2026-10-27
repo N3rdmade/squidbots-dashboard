@@ -1,6 +1,6 @@
 /* Dedicated CoA Mail Center — separate from moderation. Never writes to SQL. */
 (() => {
-  let players = [], items = [], cart = [], recipient = "", query = "", timer = null, loading = false;
+  let players = [], items = [], cart = [], recipient = "", query = "", timer = null, loading = false, nextPage = null, selected = null, requestSeq = 0;
   const $ = id => document.getElementById(id);
   const html = s => esc(String(s ?? ""));
   function icon(item) {
@@ -15,6 +15,7 @@
     const matches = items.map(v => '<button class="mail-item" type="button" data-catalog="' + v.id + '">' +
       icon(v) + '<span class="mail-item-body"><strong class="mail-quality-' + v.quality + '">' + html(v.name) + '</strong>' +
       '<small>Level ' + v.level + ' · ID ' + v.id + '</small></span><span class="mail-add">+</span></button>').join('');
+    const preview = selected ? '<div class="preview-summary">' + icon(selected) + '<div><strong class="mail-quality-' + selected.quality + '">' + html(selected.name) + '</strong><p class="meta">Item ID ' + selected.id + ' · Display ID ' + selected.displayId + ' · Level ' + selected.level + '</p></div></div>' : '<p class="meta">Select an item to inspect its appearance.</p>';
     const slots = Array.from({length:12},(_,i)=>{
       const v=cart[i];
       return v ? '<div class="mail-slot filled" title="' + html(v.name) + '">' + icon(v) +
@@ -24,7 +25,8 @@
     $("mailPage").innerHTML = '<div class="mail-layout"><section class="card mail-catalog"><div class="mail-heading"><h2>Item Library</h2><span class="meta">Search your CoA item database</span></div>' +
       '<input id="mailSearch" type="search" placeholder="Search items (e.g. head, sword, potion)" value="' + html(query) + '" aria-label="Search items">' +
       '<div id="mailCatalogStatus" class="meta">' + (loading ? 'Searching…' : items.length ? items.length + ' matching items' : 'Type at least two characters to search') + '</div>' +
-      '<div class="mail-items">' + matches + '</div></section>' +
+      '<div class="mail-items">' + matches + '</div>' +
+      (nextPage ? '<button class="btn" id="mailLoadMore" type="button">Load more matching CoA items</button>' : '') + '</section>' +
       '<section class="card mail-compose"><div class="mail-heading"><h2>Compose Mail</h2><span class="meta">Delivered using the worldserver GM console</span></div>' +
       '<label for="mailRecipient">Online player</label><select id="mailRecipient"><option value="">Select an online player</option>' + choices + '</select>' +
       '<p class="meta">' + online.length + ' player(s) online · Bots excluded</p>' +
@@ -35,7 +37,12 @@
       '<div class="mail-gold"><label for="mailGold">Gold</label><input type="number" min="1" max="100000" id="mailGold" value="100">' +
       '<button class="btn" id="mailSendGold" type="button">Send gold</button></div></div>' +
       '<p class="meta">Item attachments and gold are sent in separate messages. A server RA connection is required.</p>' +
-      '<p class="gm-result" role="status" id="mailFeedback"></p></section></div>';
+      '<p class="gm-result" role="status" id="mailFeedback"></p></section>' +
+      '<section class="card mail-preview"><div class="mail-heading"><h2>Item Preview</h2><span class="meta">3D model workspace</span></div>' +
+      preview + '<div class="mail-model-frame" id="mailModelFrame"><div class="mail-model-empty">' +
+      (selected ? '3D model asset not available yet for this CoA item.' : 'Choose an item to preview') + '</div></div>' +
+      '<p class="meta">The CoA item database identifies the model, but 3D geometry must be extracted from the game client. Icons are not 3D assets.</p>' +
+      '<p class="meta">Custom CoA appearances will require assets from your actual CoA client.</p></section></div>';
   }
   // Redraw while retaining the composer's unsent text and selected recipient.
   function redraw() {
@@ -55,17 +62,34 @@
   }
   async function search() {
     query = $("mailSearch")?.value.trim() || "";
-    if(query.length < 2){items=[];redraw();return;}
+    if(query.length < 2){items=[];nextPage=null;redraw();return;}
+    const seq = ++requestSeq;
     loading=true;
     const status=$("mailCatalogStatus");if(status)status.textContent='Searching…';
     try{
       const response=await fetch('/api/items?q='+encodeURIComponent(query),{cache:'no-store'});
       const data=await response.json();
       if(!response.ok || data.error)throw Error(data.error||'Search failed');
+      if(seq!==requestSeq)return;
       items=data.items||[];
+      nextPage=data.next||null;
       loading=false;
       redraw();
-    }catch(e){loading=false;items=[];redraw();if($("mailCatalogStatus"))$("mailCatalogStatus").textContent='Search failed: '+e.message;}
+    }catch(e){if(seq!==requestSeq)return;loading=false;items=[];nextPage=null;redraw();if($("mailCatalogStatus"))$("mailCatalogStatus").textContent='Search failed: '+e.message;}
+  }
+  async function loadMore(){
+    if(!nextPage || loading)return;
+    const cursor=nextPage, term=query, seq=requestSeq;
+    loading=true;
+    try{
+      const response=await fetch('/api/items?q='+encodeURIComponent(term)+'&after='+cursor,{cache:'no-store'});
+      const data=await response.json();
+      if(!response.ok || data.error)throw Error(data.error||'More results unavailable');
+      if(seq!==requestSeq || term!==query)return;
+      items.push(...(data.items||[]));
+      nextPage=data.next||null;
+      loading=false;redraw();
+    }catch(e){loading=false;const status=$('mailCatalogStatus');if(status)status.textContent='Could not load more: '+e.message;}
   }
   async function send(kind){
     const pick=players.find(p=>String(p.guid)===($("mailRecipient")?.value || recipient));
@@ -92,8 +116,10 @@
     if(e.target.id==='mailRecipient') recipient=e.target.value;
   });
   document.addEventListener('click',e=>{
+    if(e.target.closest('#mailLoadMore')) { loadMore(); return; }
     const add=e.target.closest('[data-catalog]');
     if(add){const item=items.find(v=>String(v.id)===add.dataset.catalog);if(!item)return;
+      selected=item;
       const found=cart.find(v=>v.id===item.id);
       if(found)found.count=Math.min(200,found.count+1);
       else if(cart.length<12)cart.push({...item,count:1});
