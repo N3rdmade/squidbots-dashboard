@@ -201,7 +201,9 @@ async function renderCharacter(name) {
       + (data.bot && data.online ? '<button class="btn small" type="button" id="seeSheetBot">' + esc(words.seeOnMap) + "</button>" : "")
     + "</div>"
     + '<section class="card doll"><div class="doll-side">' + DOLL_LEFT.map(s => tile(s, "left")).join("") + "</div>"
-      + '<div class="doll-middle"><h3>' + esc(words.statsTitle) + "</h3>" + stats + '<p class="meta">'
+      + '<div class="doll-middle"><h3>3D Character Viewer</h3><div id="armory3d" class="armory-3d-host">' +
+      '<p class="meta">Connect a compatible AzerothCore Armory renderer to view characters in 3D.</p></div>' +
+      '<h3>' + esc(words.statsTitle) + "</h3>" + stats + '<p class="meta">'
       + esc(data.stats.source === "saved" ? words.statsSaved : words.statsGear) + "</p></div>"
       + '<div class="doll-side right">' + DOLL_RIGHT.map(s => tile(s, "right")).join("") + "</div>"
       + '<div class="doll-bottom">' + DOLL_BOTTOM.map(s => tile(s, "left")).join("") + "</div></section>"
