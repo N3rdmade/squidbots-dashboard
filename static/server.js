@@ -472,6 +472,7 @@ function showServerPage(page) {
   if (page === "server") { loadPerf(); perfTimer = setInterval(() => { if (!document.hidden) loadPerf(); }, 30000); }
   if (page === "market") loadMarket();
   if (page === "gm") loadGm();
+  if (page === "mail" && typeof showMailPage === "function") showMailPage();
 }
 
 document.getElementById("langButton").addEventListener("click", () => {
