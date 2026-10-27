@@ -1625,13 +1625,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             # Hex literals prevent user-supplied text from escaping into SQL.
             safe = term.encode("utf-8").hex()
-            sql = ("SELECT entry, name, Quality, ItemLevel, stackable "
-                   "FROM `%s`.item_template WHERE name LIKE CONCAT('%%', CONVERT(X'%s' USING utf8mb4), '%%') "
+            sql = ("SELECT entry, name, Quality, ItemLevel, stackable, displayid "
+                   "FROM `%s`.item_template "
+                   "WHERE CONVERT(name USING utf8mb4) COLLATE utf8mb4_unicode_ci "
+                   "LIKE CONCAT('%%', CONVERT(X'%s' USING utf8mb4) COLLATE utf8mb4_unicode_ci, '%%') "
                    "ORDER BY name LIMIT 60" % (ctx.db["world"], safe))
-            status, payload = answer_or_error(lambda: [
-                {"id": int(row[0]), "name": row[1], "quality": int(row[2]),
-                 "level": int(row[3]), "stack": int(row[4])}
-                for row in mysql(sql)])
+            def item_results():
+                rows = mysql(sql)
+                armory = ctx.armory
+                icons = armory._icon_names(int(row[5]) for row in rows) if armory else {}
+                return [{"id": int(row[0]), "name": row[1], "quality": int(row[2]),
+                         "level": int(row[3]), "stack": int(row[4]),
+                         "icon": icons.get(int(row[5]), "")} for row in rows]
+            status, payload = answer_or_error(item_results)
             self._json({"items": payload} if status == 200 else payload, status)
         elif path == "/api/gm":
             if not GM_ENABLED:
