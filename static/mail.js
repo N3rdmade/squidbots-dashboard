@@ -92,8 +92,9 @@
       if (seq !== modelSeq || !$('mailModelFrame')) return;
       if (!response.ok) throw Error(result.error || 'Unable to check model library');
       if (!result.available) {
-        frame.textContent = 'No converted local 3D model for display ID ' + id +
-          '. Import a GLB model for this appearance using the asset setup guide.';
+        frame.textContent = 'No rendered model is available for display ID ' + id + '. ' +
+          (clientFolder ? 'CoA archives selected, but automatic MPQ/M2 model decoding is not yet connected.' :
+            'Select your local CoA folder to prepare for direct client-asset previews.');
         return;
       }
       await Promise.race([
