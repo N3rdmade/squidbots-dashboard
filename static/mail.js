@@ -43,6 +43,24 @@
       if (error.name !== 'AbortError' && status) status.textContent = 'Could not inspect folder: ' + error.message;
     }
   }
+  async function inspectClientAssets(){
+    const status = $('mailClientStatus');
+    if(!clientFolder){if(status)status.textContent='Select your CoA folder first.';return;}
+    const button = $('mailInspectCoA');
+    if(button)button.disabled=true;
+    try {
+      if(status)status.textContent='Inspecting client MPQ data locally…';
+      const {inspectCoAClient} = await import('/static/client-mpq.js');
+      const result = await inspectCoAClient(clientFolder, text=>{
+        if($('mailClientStatus'))$('mailClientStatus').textContent=text;
+      });
+      const summary = result.archive + ': ItemDisplayInfo.dbc verified (' + result.records +
+        ' records; ' + result.fields + ' fields per record).';
+      if($('mailClientStatus'))$('mailClientStatus').textContent=summary;
+    }catch(error){
+      if($('mailClientStatus'))$('mailClientStatus').textContent='MPQ inspection: '+error.message;
+    }finally{if($('mailInspectCoA'))$('mailInspectCoA').disabled=false;}
+  }
   const html = s => esc(String(s ?? ""));
   function icon(item) {
     if (!item.icon || !/^[a-z0-9_]+$/i.test(item.icon)) return '<span class="mail-icon mail-icon-empty">?</span>';
@@ -85,6 +103,7 @@
       '<section class="card mail-preview"><div class="mail-heading"><h2>Item Preview</h2><span class="meta">3D model workspace</span></div>' +
       '<div class="mail-client-source"><button class="btn small" id="mailChooseCoA" type="button">' +
       (clientFolder ? 'Change CoA folder' : 'Select local CoA folder') + '</button>' +
+      (clientFolder ? ' <button class="btn small" id="mailInspectCoA" type="button">Inspect client DBC</button>' : '') +
       '<p class="meta" id="mailClientStatus">' +
       (clientFolder ? html(clientFolderName) + ' · ' + clientArchiveCount + ' MPQ archives detected (browser only)' :
         'Optional: select the game folder on this computer. No game files are uploaded.') +
@@ -210,6 +229,7 @@
   });
   document.addEventListener('click',e=>{
     if(e.target.closest('#mailChooseCoA')) { chooseClientFolder(); return; }
+    if(e.target.closest('#mailInspectCoA')) { inspectClientAssets(); return; }
     if(e.target.closest('#mailLoadMore')) { loadMore(); return; }
     const view=e.target.closest('[data-catalog]');
     if(view){
