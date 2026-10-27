@@ -1615,6 +1615,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             realm=ctx.realm.public(), crashes=server_state(ctx), cores=procinfo.cores()))
         elif path == "/api/market":
             self._json(ctx.market.get())
+        elif path == "/api/item-count":
+            if not GM_ENABLED:
+                self._json({"error": "GM tools are disabled"}, 403)
+                return
+            status, payload = answer_or_error(lambda: {
+                "total": int(mysql("SELECT COUNT(*) FROM `%s`.item_template" % ctx.db["world"])[0][0]),
+                "source": ctx.db["world"] + ".item_template"
+            })
+            self._json(payload, status)
         elif path == "/api/items":
             if not GM_ENABLED:
                 self._json({"error": "GM tools are disabled"}, 403)
