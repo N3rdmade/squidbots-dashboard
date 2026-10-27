@@ -155,6 +155,35 @@
         frame.textContent = '3D viewer error: ' + error.message;
     }
   }
+  let appearanceSeq = 0, appearanceCache = new Map();
+  async function lookupNativeAppearance(item) {
+    const seq = ++appearanceSeq;
+    const frame = $('mailModelFrame');
+    if(!clientFolder || !frame || !item)return;
+    const id = Number(item.displayId);
+    if(appearanceCache.has(id)){
+      const result=appearanceCache.get(id);
+      frame.textContent = 'CoA appearance found in '+result.archive +
+        '. Model: '+(result.model1||'(no standalone model)') +
+        (result.model2?' / '+result.model2:'')+
+        '. Native M2 rendering is not yet connected.';
+      return;
+    }
+    try {
+      const {resolveCoADisplay} = await import('/static/client-mpq.js');
+      const result = await resolveCoADisplay(clientFolder,id,msg=>{
+        if(seq===appearanceSeq && $('mailModelFrame')) $('mailModelFrame').textContent=msg;
+      });
+      if(seq!==appearanceSeq || !$('mailModelFrame'))return;
+      appearanceCache.set(id,result);
+      $('mailModelFrame').textContent='CoA appearance found in '+result.archive+
+        '. Model: '+(result.model1||'(no standalone model)') +
+        (result.model2?' / '+result.model2:'')+
+        '. Native M2 rendering is not yet connected.';
+    }catch(error){
+      if(seq===appearanceSeq && $('mailModelFrame'))$('mailModelFrame').textContent='Client appearance lookup: '+error.message;
+    }
+  }
   // Redraw while retaining the composer's unsent text and selected recipient.
   function redraw() {
     const values = ['mailSubject','mailBody','mailGold'].map(id=>$(id)?.value);
@@ -234,7 +263,7 @@
     const view=e.target.closest('[data-catalog]');
     if(view){
       const item=items.find(v=>String(v.id)===view.dataset.catalog);
-      if(item){selected=item;redraw();}
+      if(item){selected=item;redraw();if(clientFolder)lookupNativeAppearance(item);}
       return;
     }
     const add=e.target.closest('[data-mail-attach]');
