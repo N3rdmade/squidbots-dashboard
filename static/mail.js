@@ -184,14 +184,6 @@
       if(!config.ready)throw Error('WotLK model assets are not installed on the server. See WOTLK_VIEWER_SETUP.md.');
       window.CONTENT_PATH='/wotlk-model-data/';
       window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;
-      if(!window.ZamModelViewer){
-        await new Promise((ok,no)=>{
-          const script=document.createElement('script');
-          script.src='/wotlk-model-data/viewer/viewer.min.js';
-          script.onload=ok;script.onerror=()=>no(Error('WotLK renderer script missing'));
-          document.head.append(script);
-        });
-      }
       return import('https://esm.sh/wotlk-model-viewer@1.1.9?bundle');
     })().catch(e=>{characterViewerPromise=null;throw e;});
     return characterViewerPromise;
