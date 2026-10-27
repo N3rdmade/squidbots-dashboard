@@ -89,12 +89,10 @@
     try{
       const lib=await loadCharacterViewer();
       if(seq!==characterSeq || frame!==$('mailModelFrame'))return;
-      if(item){
-        const slot=equipmentSlot(item);
-        if(!slot)throw Error('This item has no supported equipment slot. Choose a weapon or armor piece.');
-        characterAppearance.items=characterAppearance.items.filter(e=>e[0]!==slot);
-        characterAppearance.items.push([slot,Number(item.displayId)]);
-      }
+      const slot=item?equipmentSlot(item):0;
+      if(item && !slot)throw Error('This item does not have a visible equipment slot.');
+      // Preview exactly one item, clearing previously equipped pieces.
+      characterAppearance.items=item?[[slot,Number(item.displayId)]]:[];
       frame.innerHTML='<div id="coaCharacterCanvas" style="height:420px;width:100%;"></div>';
       viewerStage='Checking WotLK character customization data';
       const metaPath='/wotlk-model-data/meta/charactercustomization2/' +
