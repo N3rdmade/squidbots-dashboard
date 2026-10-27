@@ -43,9 +43,9 @@
       '<p class="gm-result" role="status" id="mailFeedback"></p></section>' +
       '<section class="card mail-preview"><div class="mail-heading"><h2>Item Preview</h2><span class="meta">3D model workspace</span></div>' +
       preview + '<div class="mail-model-frame" id="mailModelFrame"><div class="mail-model-empty">' +
-      (selected ? 'Loading model availability…' : 'Choose an item to preview') + '</div></div>' +
-      '<p class="meta">The CoA item database identifies the model, but 3D geometry must be extracted from the game client. Icons are not 3D assets.</p>' +
-      '<p class="meta">Custom CoA appearances will require assets from your actual CoA client.</p></section></div>';
+      (selected ? 'Loading 3D preview…' : 'Choose an item to preview') + '</div></div>' +
+      '<p class="meta">3D preview uses the online WoW model service. Standard appearances may load; custom CoA models may not be available.</p>' +
+      '</section></div>';
   }
   let modelSeq = 0, activeZamModel = null, zamLibraryPromise = null;
   // CoA display IDs are not item entry IDs; use the display ID from the database.
