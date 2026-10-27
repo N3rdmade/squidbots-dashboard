@@ -47,35 +47,47 @@
       '<p class="meta">The CoA item database identifies the model, but 3D geometry must be extracted from the game client. Icons are not 3D assets.</p>' +
       '<p class="meta">Custom CoA appearances will require assets from your actual CoA client.</p></section></div>';
   }
-  let modelSeq = 0;
+  let modelSeq = 0, activeZamModel = null, zamLibraryPromise = null;
+  // CoA display IDs are not item entry IDs; use the display ID from the database.
+  function loadZamLibrary(){
+    if(!zamLibraryPromise){
+      zamLibraryPromise=(async()=>{
+        window.CONTENT_PATH='https://wow.zamimg.com/modelviewer/live/';
+        window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;
+        if(!document.querySelector('script[data-zam-viewer]')){
+          await new Promise((resolve,reject)=>{
+            const el=document.createElement('script');
+            el.src='https://wow.zamimg.com/modelviewer/live/viewer/viewer.min.js';
+            el.dataset.zamViewer='1';
+            el.onload=resolve;el.onerror=()=>reject(Error('ZAM renderer could not load'));
+            document.head.appendChild(el);
+          });
+        }
+        return import('https://esm.sh/wow-model-viewer@1.5.1?bundle');
+      })().catch(error=>{zamLibraryPromise=null;throw error;});
+    }
+    return zamLibraryPromise;
+  }
   async function updateModel(){
-    const target=$('mailModelFrame'), item=selected;
-    if(!target || !item)return;
-    const seq=++modelSeq;
+    const target=$('mailModelFrame'),item=selected,seq=++modelSeq;
+    if(!target||!item)return;
+    if(activeZamModel){try{activeZamModel.destroy();}catch(e){}activeZamModel=null;}
     const id=Number(item.displayId);
-    if(!Number.isSafeInteger(id) || id<=0){target.textContent='No display ID for this item.';return;}
-    const path='/static/models/'+id+'.glb';
+    if(!Number.isSafeInteger(id)||id<=0){target.textContent='This item has no 3D display ID.';return;}
+    target.textContent='Loading 3D preview…';
     try{
-      const response=await fetch('/api/model-available?display='+id,{cache:'no-store'});
-      const availability=await response.json();
-      if(seq!==modelSeq || !$('mailModelFrame'))return;
-      if(!response.ok || !availability.available)throw new Error('Asset not installed');
-      const model=document.createElement('model-viewer');
-      model.setAttribute('src',path);
-      model.setAttribute('alt','3D preview of '+item.name);
-      model.setAttribute('camera-controls','');
-      model.setAttribute('auto-rotate','');
-      model.setAttribute('shadow-intensity','1');
-      model.setAttribute('interaction-prompt','auto');
-      model.style.cssText='height:100%;width:100%;min-height:410px;background:transparent;';
-      model.addEventListener('error',()=>{
-        const frame=$('mailModelFrame');
-        if(frame)frame.textContent='Model could not be decoded. Check its GLB file.';
-      });
-      target.replaceChildren(model);
+      const lib=await loadZamLibrary();
+      if(seq!==modelSeq||!$('mailModelFrame'))return;
+      target.replaceChildren();
+      const container=document.createElement('div');container.id='coaZamModel';
+      container.style.cssText='width:100%;height:410px;min-height:410px;';
+      target.appendChild(container);
+      const model=await lib.generateModels(1,'#coaZamModel',{type:1,id});
+      if(seq!==modelSeq){try{model?.destroy();}catch(e){}return;}
+      activeZamModel=model;
     }catch(error){
-      if(seq!==modelSeq || !$('mailModelFrame'))return;
-      target.innerHTML='<div class="mail-model-empty">3D model not available for this appearance yet. Add a converted GLB as <code>static/models/'+id+'.glb</code> to enable rotation and zoom.</div>';
+      if(seq!==modelSeq||!$('mailModelFrame'))return;
+      target.textContent='3D preview unavailable: '+(error?.message||'ZAM asset lookup failed')+'. Some custom CoA appearances are not hosted by ZAM.';
     }
   }
   // Redraw while retaining the composer's unsent text and selected recipient.
