@@ -103,7 +103,7 @@
       '<p class="gm-result" role="status" id="mailFeedback"></p></section>' +
       '<section class="card mail-preview"><div class="mail-heading"><h2>Item Preview</h2><span class="meta">3D model workspace</span></div>' +
       '<div class="mail-client-source"><button class="btn small" id="mailCharacterMode" type="button">' +
-      (characterMode?'Show item model':'Show on 3D character') + '</button></div>' +
+      (characterMode?'3D character preview':'Experimental item mesh') + '</button></div>' +
       '<div class="mail-client-source"><button class="btn small" id="mailChooseCoA" type="button">' +
       (clientFolder ? 'Change CoA folder' : 'Select local CoA folder') + '</button>' +
       (clientFolder ? ' <button class="btn small" id="mailInspectCoA" type="button">Inspect client DBC</button>' : '') +
@@ -163,7 +163,7 @@
         frame.textContent = '3D viewer error: ' + error.message;
     }
   }
-  let characterModel=null, characterViewerPromise=null, characterSeq=0, characterMode=false;
+  let characterModel=null, characterViewerPromise=null, characterSeq=0, characterMode=true;
   const characterAppearance={race:1,gender:1,skin:0,face:0,hairStyle:0,hairColor:0,facialStyle:0,items:[]};
   const equipmentSlot = item => {
     // InventoryType is required for assigning a correct paper-doll slot.
