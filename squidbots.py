@@ -1625,20 +1625,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             # Hex literals prevent user-supplied text from escaping into SQL.
             safe = term.encode("utf-8").hex()
+            # Always query the live CoA world item_template: custom IDs included.
+            # Keyset pagination avoids silently hiding everything after the first 60.
+            after = first("after") or "0"
+            if not after.isdecimal() or len(after) > 10:
+                self._json({"error": "Invalid pagination cursor"}, 400)
+                return
+            cursor = min(int(after), 4294967295)
             sql = ("SELECT entry, name, Quality, ItemLevel, stackable, displayid "
                    "FROM `%s`.item_template "
-                   "WHERE CONVERT(name USING utf8mb4) COLLATE utf8mb4_unicode_ci "
+                   "WHERE entry > %d AND CONVERT(name USING utf8mb4) COLLATE utf8mb4_unicode_ci "
                    "LIKE CONCAT('%%', CONVERT(X'%s' USING utf8mb4) COLLATE utf8mb4_unicode_ci, '%%') "
-                   "ORDER BY name LIMIT 60" % (ctx.db["world"], safe))
+                   "ORDER BY entry LIMIT 61" % (ctx.db["world"], cursor, safe))
             def item_results():
                 rows = mysql(sql)
+                more = len(rows) > 60
+                rows = rows[:60]
                 armory = ctx.armory
                 icons = armory._icon_names(int(row[5]) for row in rows) if armory else {}
-                return [{"id": int(row[0]), "name": row[1], "quality": int(row[2]),
-                         "level": int(row[3]), "stack": int(row[4]),
-                         "icon": icons.get(int(row[5]), "")} for row in rows]
+                results = [{"id": int(row[0]), "name": row[1], "quality": int(row[2]),
+                            "level": int(row[3]), "stack": int(row[4]),
+                            "displayId": int(row[5]),
+                            "icon": icons.get(int(row[5]), "")} for row in rows]
+                return {"items": results, "next": int(rows[-1][0]) if more and rows else None,
+                        "source": ctx.db["world"] + ".item_template"}
             status, payload = answer_or_error(item_results)
-            self._json({"items": payload} if status == 200 else payload, status)
+            self._json(payload, status)
         elif path == "/api/gm":
             if not GM_ENABLED:
                 self._json({"error": "The GM tools are turned off in dashboard.json (gmTools)."}, 403)
