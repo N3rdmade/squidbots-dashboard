@@ -97,11 +97,21 @@ def _command(action, body):
         return ".send money %s %s %s %d" % (target(), _quoted(body.get("subject") or "Gift", 60, "subject"),
                                             _quoted(body.get("text") or "From the game masters.", 200, "text"), copper)
     if action == "items":
-        item = _int(body.get("item"), 1, 9999999, "item number")
-        count = _int(body.get("count") or 1, 1, 200, "count")
-        return ".send items %s %s %s %d:%d" % (target(), _quoted(body.get("subject") or "Gift", 60, "subject"),
-                                               _quoted(body.get("text") or "From the game masters.", 200, "text"),
-                                               item, count)
+        entries = body.get("items")
+        if entries is None:
+            entries = [{"item": body.get("item"), "count": body.get("count") or 1}]
+        if not isinstance(entries, list) or not 1 <= len(entries) <= 12:
+            raise GmError("A mail can contain 1 to 12 attachments.")
+        attachments = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                raise GmError("Each attachment needs an item and quantity.")
+            item = _int(entry.get("item"), 1, 9999999, "item number")
+            count = _int(entry.get("count") or 1, 1, 200, "count")
+            attachments.append("%d:%d" % (item, count))
+        return ".send items %s %s %s %s" % (target(), _quoted(body.get("subject") or "Gift", 60, "subject"),
+                                              _quoted(body.get("text") or "From the game masters.", 200, "text"),
+                                              " ".join(attachments))
     if action == "ban":
         duration = str(body.get("duration") or "").strip().lower()
         if not DURATION.match(duration) or duration in ("0",):
