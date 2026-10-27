@@ -12,9 +12,11 @@
     if (!$("mailPage")) return;
     const online = players.filter(p => p.online);
     const choices = online.map(p => '<option value="' + html(p.guid) + '"' + (String(p.guid) === recipient ? ' selected' : '') + '>' + html(p.name) + ' · lvl ' + p.level + '</option>').join('');
-    const matches = items.map(v => '<button class="mail-item" type="button" data-catalog="' + v.id + '">' +
+    const matches = items.map(v => '<div class="mail-item' + (selected && selected.id === v.id ? ' is-selected' : '') + '">' +
+      '<button class="mail-item-view" type="button" data-catalog="' + v.id + '" aria-label="Preview ' + html(v.name) + '">' +
       icon(v) + '<span class="mail-item-body"><strong class="mail-quality-' + v.quality + '">' + html(v.name) + '</strong>' +
-      '<small>Level ' + v.level + ' · ID ' + v.id + '</small></span><span class="mail-add">+</span></button>').join('');
+      '<small>Level ' + v.level + ' · ID ' + v.id + '</small></span></button>' +
+      '<button type="button" class="mail-add" data-mail-attach="' + v.id + '" aria-label="Attach ' + html(v.name) + '" title="Add to mail">+</button></div>').join('');
     const preview = selected ? '<div class="preview-summary">' + icon(selected) + '<div><strong class="mail-quality-' + selected.quality + '">' + html(selected.name) + '</strong><p class="meta">Item ID ' + selected.id + ' · Display ID ' + selected.displayId + ' · Level ' + selected.level + '</p></div></div>' : '<p class="meta">Select an item to inspect its appearance.</p>';
     const slots = Array.from({length:12},(_,i)=>{
       const v=cart[i];
@@ -118,13 +120,21 @@
   });
   document.addEventListener('click',e=>{
     if(e.target.closest('#mailLoadMore')) { loadMore(); return; }
-    const add=e.target.closest('[data-catalog]');
-    if(add){const item=items.find(v=>String(v.id)===add.dataset.catalog);if(!item)return;
-      selected=item;
+    const view=e.target.closest('[data-catalog]');
+    if(view){
+      const item=items.find(v=>String(v.id)===view.dataset.catalog);
+      if(item){selected=item;redraw();}
+      return;
+    }
+    const add=e.target.closest('[data-mail-attach]');
+    if(add){
+      const item=items.find(v=>String(v.id)===add.dataset.mailAttach);
+      if(!item)return;
       const found=cart.find(v=>v.id===item.id);
       if(found)found.count=Math.min(200,found.count+1);
       else if(cart.length<12)cart.push({...item,count:1});
-      redraw();return;}
+      redraw();return;
+    }
     const remove=e.target.closest('[data-remove]');
     if(remove){cart.splice(Number(remove.dataset.remove),1);redraw();return;}
     if(e.target.closest('#mailSendItems'))send('items');
