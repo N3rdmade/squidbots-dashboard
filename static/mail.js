@@ -43,9 +43,39 @@
       '<p class="gm-result" role="status" id="mailFeedback"></p></section>' +
       '<section class="card mail-preview"><div class="mail-heading"><h2>Item Preview</h2><span class="meta">3D model workspace</span></div>' +
       preview + '<div class="mail-model-frame" id="mailModelFrame"><div class="mail-model-empty">' +
-      (selected ? '3D model asset not available yet for this CoA item.' : 'Choose an item to preview') + '</div></div>' +
+      (selected ? 'Loading model availability…' : 'Choose an item to preview') + '</div></div>' +
       '<p class="meta">The CoA item database identifies the model, but 3D geometry must be extracted from the game client. Icons are not 3D assets.</p>' +
       '<p class="meta">Custom CoA appearances will require assets from your actual CoA client.</p></section></div>';
+  }
+  let modelSeq = 0;
+  async function updateModel(){
+    const target=$('mailModelFrame'), item=selected;
+    if(!target || !item)return;
+    const seq=++modelSeq;
+    const id=Number(item.displayId);
+    if(!Number.isSafeInteger(id) || id<=0){target.textContent='No display ID for this item.';return;}
+    const path='/static/models/'+id+'.glb';
+    try{
+      const response=await fetch(path,{method:'HEAD',cache:'no-store'});
+      if(seq!==modelSeq || !$('mailModelFrame'))return;
+      if(!response.ok)throw new Error('Asset not installed');
+      const model=document.createElement('model-viewer');
+      model.setAttribute('src',path);
+      model.setAttribute('alt','3D preview of '+item.name);
+      model.setAttribute('camera-controls','');
+      model.setAttribute('auto-rotate','');
+      model.setAttribute('shadow-intensity','1');
+      model.setAttribute('interaction-prompt','auto');
+      model.style.cssText='height:100%;width:100%;min-height:410px;background:transparent;';
+      model.addEventListener('error',()=>{
+        const frame=$('mailModelFrame');
+        if(frame)frame.textContent='Model could not be decoded. Check its GLB file.';
+      });
+      target.replaceChildren(model);
+    }catch(error){
+      if(seq!==modelSeq || !$('mailModelFrame'))return;
+      target.innerHTML='<div class="mail-model-empty">3D model not available for this appearance yet. Add a converted GLB as <code>static/models/'+id+'.glb</code> to enable rotation and zoom.</div>';
+    }
   }
   // Redraw while retaining the composer's unsent text and selected recipient.
   function redraw() {
@@ -53,6 +83,7 @@
     recipient = $("mailRecipient")?.value || recipient;
     query = $("mailSearch")?.value ?? query;
     draw();
+    updateModel();
     ['mailSubject','mailBody','mailGold'].forEach((id,i)=>{if(values[i]!==undefined && $(id))$(id).value=values[i];});
   }
   async function loadPlayers() {
