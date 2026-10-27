@@ -56,9 +56,10 @@
     if(!Number.isSafeInteger(id) || id<=0){target.textContent='No display ID for this item.';return;}
     const path='/static/models/'+id+'.glb';
     try{
-      const response=await fetch(path,{method:'HEAD',cache:'no-store'});
+      const response=await fetch('/api/model-available?display='+id,{cache:'no-store'});
+      const availability=await response.json();
       if(seq!==modelSeq || !$('mailModelFrame'))return;
-      if(!response.ok)throw new Error('Asset not installed');
+      if(!response.ok || !availability.available)throw new Error('Asset not installed');
       const model=document.createElement('model-viewer');
       model.setAttribute('src',path);
       model.setAttribute('alt','3D preview of '+item.name);
