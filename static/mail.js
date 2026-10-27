@@ -17,7 +17,7 @@
       icon(v) + '<span class="mail-item-body"><strong class="mail-quality-' + v.quality + '">' + html(v.name) + '</strong>' +
       '<small>Level ' + v.level + ' · ID ' + v.id + '</small></span></button>' +
       '<button type="button" class="mail-add" data-mail-attach="' + v.id + '" aria-label="Attach ' + html(v.name) + '" title="Add to mail">+</button></div>').join('');
-    const preview = selected ? '<div class="preview-summary">' + icon(selected) + '<div><strong class="mail-quality-' + selected.quality + '">' + html(selected.name) + '</strong><p class="meta">Item ID ' + selected.id + ' · Display ID ' + selected.displayId + ' · Level ' + selected.level + '</p></div></div>' : '<p class="meta">Select an item to inspect its appearance.</p>';
+    const preview = selected ? '<div class="preview-summary">' + icon(selected) + '<div><strong class="mail-quality-' + selected.quality + '">' + html(selected.name) + '</strong><p class="meta">Item ID ' + selected.id + ' · Display ID ' + selected.displayId + ' · Level ' + selected.level + '</p></div></div>' : '<p class="meta">Select an item to see its details.</p>';
     const slots = Array.from({length:12},(_,i)=>{
       const v=cart[i];
       return v ? '<div class="mail-slot filled" title="' + html(v.name) + '">' + icon(v) +
@@ -41,122 +41,17 @@
       '<button class="btn" id="mailSendGold" type="button">Send gold</button></div></div>' +
       '<p class="meta">Item attachments and gold are sent in separate messages. A server RA connection is required.</p>' +
       '<p class="gm-result" role="status" id="mailFeedback"></p></section>' +
-      '<section class="card mail-preview"><div class="mail-heading"><h2>Item Preview</h2><span class="meta">3D dressing room</span></div>' +
-      '<button class="btn small" id="mailClearPreview" type="button">Clear equipment</button>' +
-      preview + '<div class="mail-model-frame" id="mailModelFrame"><div class="mail-model-empty">' +
-      (selected ? 'Loading 3D preview…' : 'Choose an item to preview') + '</div></div>' +
-      '<div id="mailViewerNotes"><p class="meta">Character models and armor use the server-hosted WotLK asset library.</p></div>' +
+      '<section class="card mail-preview"><div class="mail-heading"><h2>Item Details</h2><span class="meta">Selected catalog item</span></div>' +
+      '<button class="btn small" id="mailClearPreview" type="button">Clear selection</button>' +
+      preview +
       '</section></div>';
-  }
-  let characterModel=null, characterViewerPromise=null, characterSeq=0;
-  const characterAppearance={race:1,gender:1,skin:0,face:0,hairStyle:0,hairColor:0,facialStyle:0,items:[]};
-  const equipmentSlot = item => {
-    // InventoryType enumerations from WoW 3.3.5, not character inventory indices.
-    const type=Number(item.inventoryType);
-    return ({1:1,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,
-      13:21,14:14,15:15,16:16,17:17,19:19,20:20,21:21,22:22,23:23,25:25,26:26})[type]||0;
-  };
-  let viewerStage='initialization';
-  async function loadCharacterViewer() {
-    if(!characterViewerPromise)characterViewerPromise=(async()=>{
-      if(!window.jQuery){
-        await new Promise((ok,no)=>{
-          const script=document.createElement('script');script.src='https://code.jquery.com/jquery-3.5.1.min.js';
-          script.onload=ok;script.onerror=()=>no(Error('jQuery unavailable'));
-          document.head.append(script);
-        });
-      }
-      viewerStage='Checking dashboard model-data configuration';
-      const response=await fetch('/api/character-viewer-config',{cache:'no-store'});
-      const raw=await response.text();
-      let config;
-      try{config=JSON.parse(raw);}
-      catch(e){throw Error('Viewer configuration endpoint returned HTML (HTTP '+response.status+
-          '). The running Ubuntu dashboard has not loaded the new route; restart only squidbots-test.');}
-      if(!response.ok)throw Error(config.error||'Viewer configuration HTTP '+response.status);
-      if(!config.ready)throw Error('The WotLK model-data package is missing on Ubuntu. See WOTLK_VIEWER_SETUP.md.');
-      window.CONTENT_PATH='/wotlk-model-data/';
-      window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;
-      viewerStage='Loading WotLK viewer library';
-      return import('https://esm.sh/wotlk-model-viewer@1.1.9?bundle');
-    })().catch(e=>{characterViewerPromise=null;throw e;});
-    return characterViewerPromise;
-  }
-  async function renderCharacterPreview(item){
-    const seq=++characterSeq,frame=$('mailModelFrame');
-    if(!frame)return;
-    if(characterModel){try{characterModel.destroy();}catch(e){}characterModel=null;}
-    frame.textContent='Loading 3D character viewer…';
-    try{
-      const lib=await loadCharacterViewer();
-      if(seq!==characterSeq || frame!==$('mailModelFrame'))return;
-      const slot=item?equipmentSlot(item):0;
-      if(item && !slot)throw Error('This item has no visible equipment slot.');
-      // The viewer's WotLK mapping handles armor remaps (chest/robe and
-      // equipped weapon attachment IDs), including optional armor metadata.
-      let displaySlot=slot;
-      if(item){
-        viewerStage='Resolving WotLK equipment slot';
-        const mapped=await lib.getDisplaySlot(Number(item.id),slot,Number(item.displayId));
-        displaySlot=Number(mapped?.displaySlot ?? slot);
-        if(seq!==characterSeq || frame!==$('mailModelFrame'))return;
-      }
-      characterAppearance.items=item?[[displaySlot,Number(item.displayId)]]:[];
-      frame.innerHTML='<div id="coaCharacterCanvas" style="height:420px;width:100%;"></div>';
-      viewerStage='Checking WotLK character customization data';
-      const metaPath='/wotlk-model-data/meta/charactercustomization2/' +
-        characterAppearance.race + '_' + characterAppearance.gender + '.json';
-      const metaResponse=await fetch(metaPath,{cache:'no-store'});
-      const metaContentType=metaResponse.headers.get('content-type')||'';
-      if(!metaResponse.ok || !metaContentType.toLowerCase().includes('application/json')){
-        throw Error('Expected JSON at '+metaPath+', but received HTTP '+metaResponse.status +
-          ' ('+(metaContentType||'unknown type')+'). Check the WotLK asset directory.');
-      }
-      const metaText=await metaResponse.text();
-      try {JSON.parse(metaText);}
-      catch(e){throw Error('Invalid model-data JSON at '+metaPath+': '+e.message);}
-      if(seq!==characterSeq || frame!==$('mailModelFrame'))return;
-      viewerStage='Loading character assets from the WotLK data package';
-      const model=await lib.generateModels(1,'#coaCharacterCanvas',{...characterAppearance,hideProgressBar:true});
-      if(seq!==characterSeq || frame!==$('mailModelFrame')){try{model?.destroy();}catch(e){}return;}
-      characterModel=model;
-      // Report what the equipment loader actually requested rather than silently
-      // claiming the model is dressed when its armor data is absent.
-      if(item){
-        const urls=[
-          '/wotlk-model-data/meta/armor/'+displaySlot+'/'+Number(item.displayId)+'.json',
-          '/wotlk-model-data/meta/armor/'+slot+'/'+Number(item.displayId)+'.json'
-        ].filter((url,index,array)=>array.indexOf(url)===index);
-        const checks=await Promise.all(urls.map(async url=>{
-          try{
-            const response=await fetch(url,{cache:'no-store'});
-            return {url,status:response.status,type:response.headers.get('content-type')||''};
-          }catch(error){return {url,status:'network error',type:''};}
-        }));
-        if(seq!==characterSeq || frame!==$('mailModelFrame'))return;
-        const message=document.createElement('p');
-        message.className='meta';
-        message.style.cssText='margin:8px 0 0;padding:8px 0;overflow-wrap:anywhere;';
-        const found=checks.find(x=>x.status===200 && x.type.includes('json'));
-        message.textContent=found?
-          'Appearance metadata exists for display '+item.displayId+
-          '. If the item is invisible, its actual model or texture files may be missing.':
-          'No WotLK equipment appearance data for display ID '+item.displayId+
-          '. The base character can load, but the selected gear cannot be rendered with this asset library.';
-        const notes=document.getElementById('mailViewerNotes');
-        if(notes)notes.replaceChildren(message);
-      }
-    }catch(e){if(seq===characterSeq && frame===$('mailModelFrame'))frame.textContent='3D character unavailable during '+viewerStage+': '+e.message;}
   }
   // Redraw while retaining the composer's unsent text and selected recipient.
   function redraw() {
     const values = ['mailSubject','mailBody','mailGold'].map(id=>$(id)?.value);
     recipient = $("mailRecipient")?.value || recipient;
     query = $("mailSearch")?.value ?? query;
-    ++characterSeq;
-    if(characterModel){try{characterModel.destroy();}catch(e){}characterModel=null;}
     draw();
-    renderCharacterPreview(selected);
     ['mailSubject','mailBody','mailGold'].forEach((id,i)=>{if(values[i]!==undefined && $(id))$(id).value=values[i];});
   }
   async function loadPlayers() {
@@ -250,6 +145,6 @@
     try {const r=await getJson('/api/item-count');if(!r.error){totalItems=r.total;const el=$('mailDatabaseStatus');if(el)el.textContent=totalItems.toLocaleString()+' items in '+r.source;}}
     catch(e){if($('mailDatabaseStatus'))$('mailDatabaseStatus').textContent='Item database count unavailable';}
   }
-  window.showMailPage=()=>{if(!$("mailPage"))return;draw();renderCharacterPreview(selected);loadPlayers();if(!counted){counted=true;countItems();}};
+  window.showMailPage=()=>{if(!$("mailPage"))return;draw();loadPlayers();if(!counted){counted=true;countItems();}};
   if (location.hash.split("/")[0] === "#mail") window.showMailPage();
 })();
