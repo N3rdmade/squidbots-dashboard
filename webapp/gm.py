@@ -89,7 +89,10 @@ def _command(action, body):
         name = str(body.get("destination") or "").strip()
         if not re.fullmatch(r"[A-Za-z0-9_]{1,100}", name):
             raise GmError("Select a valid saved teleport destination.")
-        return ".teleport name %s %s" % (_text(body.get("character"), 50, "character name"), name)
+        # The command parser treats whitespace as an argument separator. Quote
+        # custom CoA character names (e.g. "Boom Shakalaka") as one argument.
+        character = _quoted(body.get("character"), 50, "character name")
+        return ".teleport name %s %s" % (character, name)
     if action == "mute":
         return ".mute %s %d %s" % (target(), _int(body.get("minutes"), 1, 10080, "duration in minutes"),
                                    _text(body.get("reason"), 100, "reason"))
