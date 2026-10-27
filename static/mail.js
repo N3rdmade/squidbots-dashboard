@@ -102,6 +102,8 @@
       '<p class="meta">Item attachments and gold are sent in separate messages. A server RA connection is required.</p>' +
       '<p class="gm-result" role="status" id="mailFeedback"></p></section>' +
       '<section class="card mail-preview"><div class="mail-heading"><h2>Item Preview</h2><span class="meta">3D model workspace</span></div>' +
+      '<div class="mail-client-source"><button class="btn small" id="mailCharacterMode" type="button">' +
+      (characterMode?'Show item model':'Show on 3D character') + '</button></div>' +
       '<div class="mail-client-source"><button class="btn small" id="mailChooseCoA" type="button">' +
       (clientFolder ? 'Change CoA folder' : 'Select local CoA folder') + '</button>' +
       (clientFolder ? ' <button class="btn small" id="mailInspectCoA" type="button">Inspect client DBC</button>' : '') +
@@ -116,6 +118,7 @@
   }
   let modelSeq = 0;
   async function updateModel() {
+    if(characterMode){return renderCharacterPreview(selected);}
     const frame = $('mailModelFrame'), item = selected, seq = ++modelSeq;
     if(activeMeshViewer){activeMeshViewer();activeMeshViewer=null;}
     if (!frame || !item) return;
@@ -159,6 +162,59 @@
       if (seq === modelSeq && $('mailModelFrame'))
         frame.textContent = '3D viewer error: ' + error.message;
     }
+  }
+  let characterModel=null, characterViewerPromise=null, characterSeq=0, characterMode=false;
+  const characterAppearance={race:1,gender:1,skin:0,face:0,hairStyle:0,hairColor:0,facialStyle:0,items:[]};
+  const equipmentSlot = item => {
+    // InventoryType is required for assigning a correct paper-doll slot.
+    const type=Number(item.inventoryType);
+    return ({1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,11:11,12:13,13:21,14:22,15:15,16:15,17:21,18:18,19:19,20:20,21:21,22:22,23:22,25:18,26:18})[type]||0;
+  };
+  async function loadCharacterViewer() {
+    if(!characterViewerPromise)characterViewerPromise=(async()=>{
+      if(!window.jQuery){
+        await new Promise((ok,no)=>{
+          const script=document.createElement('script');script.src='https://code.jquery.com/jquery-3.5.1.min.js';
+          script.onload=ok;script.onerror=()=>no(Error('jQuery unavailable'));
+          document.head.append(script);
+        });
+      }
+      // The matching classic 3.3.5 renderer and data must be served by SquidBots.
+      const config=await (await fetch('/api/character-viewer-config')).json();
+      if(!config.ready)throw Error('WotLK model assets are not installed on the server. See WOTLK_VIEWER_SETUP.md.');
+      window.CONTENT_PATH='/wotlk-model-data/';
+      window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;
+      if(!window.ZamModelViewer){
+        await new Promise((ok,no)=>{
+          const script=document.createElement('script');
+          script.src='/wotlk-model-data/viewer/viewer.min.js';
+          script.onload=ok;script.onerror=()=>no(Error('WotLK renderer script missing'));
+          document.head.append(script);
+        });
+      }
+      return import('https://esm.sh/wotlk-model-viewer@1.1.9?bundle');
+    })().catch(e=>{characterViewerPromise=null;throw e;});
+    return characterViewerPromise;
+  }
+  async function renderCharacterPreview(item){
+    const seq=++characterSeq,frame=$('mailModelFrame');
+    if(!frame)return;
+    if(characterModel){try{characterModel.destroy();}catch(e){}characterModel=null;}
+    frame.textContent='Loading 3D character viewer…';
+    try{
+      const lib=await loadCharacterViewer();
+      if(seq!==characterSeq||!$('mailModelFrame'))return;
+      if(item){
+        const slot=equipmentSlot(item);
+        if(!slot)throw Error('This item has no supported equipment slot. Choose a weapon or armor piece.');
+        characterAppearance.items=characterAppearance.items.filter(e=>e[0]!==slot);
+        characterAppearance.items.push([slot,Number(item.displayId)]);
+      }
+      frame.innerHTML='<div id="coaCharacterCanvas" style="height:420px;width:100%;"></div>';
+      const model=await lib.generateModels(1,'#coaCharacterCanvas',{...characterAppearance,hideProgressBar:true});
+      if(seq!==characterSeq){try{model?.destroy();}catch(e){}return;}
+      characterModel=model;
+    }catch(e){if(seq===characterSeq&&$('mailModelFrame'))$('mailModelFrame').textContent='3D character unavailable: '+e.message;}
   }
   let appearanceSeq = 0, appearanceCache = new Map();
   async function lookupNativeAppearance(item) {
@@ -306,6 +362,7 @@
     if(e.target.id==='mailRecipient') recipient=e.target.value;
   });
   document.addEventListener('click',e=>{
+    if(e.target.closest('#mailCharacterMode')){characterMode=!characterMode;redraw();return;}
     if(e.target.closest('#mailChooseCoA')) { chooseClientFolder(); return; }
     if(e.target.closest('#mailInspectCoA')) { inspectClientAssets(); return; }
     if(e.target.closest('#mailLoadMore')) { loadMore(); return; }
