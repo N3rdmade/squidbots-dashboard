@@ -162,16 +162,20 @@ class Gm:
                     "muted": int(mute or 0) > now}
                    for guid, n, l, c, r, o, z, acc, g, b, seen, mute in rows]
         destinations = []
+        teleports_error = ""
         try:
-            city_names = ("Stormwind", "Orgrimmar", "Ironforge", "Darnassus", "Exodar",
-                          "ThunderBluff", "Undercity", "Silvermoon", "Shattrath", "Dalaran",
-                          "BootyBay", "Gadgetzan", "Ratchet", "Everlook")
-            names = ",".join("\'%s\'" % n for n in city_names)
-            found = self.query("SELECT name FROM {world}.game_tele WHERE name IN ({names}) ORDER BY name".format(world=db["world"], names=names))
+            # Names in AzerothCore game_tele differ between distributions:
+            # e.g. StormwindCity, ThunderBluff, and DalaranNorthrend.
+            keywords = ("stormwind", "orgrimmar", "ironforge", "darnassus", "exodar",
+                        "thunder", "undercity", "silvermoon", "shattrath", "dalaran",
+                        "booty", "gadgetzan", "ratchet", "everlook")
+            where = " OR ".join("LOWER(name) LIKE '%" + word + "%'" for word in keywords)
+            found = self.query("SELECT name FROM {world}.game_tele WHERE {where} ORDER BY name LIMIT 120".format(
+                world=db["world"], where=where))
             destinations = [str(row[0]) for row in found]
-        except Exception:
-            pass
-        return {"realm": ctx.realm.public(), "console": running, "raPort": ra_port, "players": players, "teleports": destinations, "teleports": destinations,
+        except Exception as error:
+            teleports_error = str(error)[:250]
+        return {"realm": ctx.realm.public(), "console": running, "raPort": ra_port, "players": players, "teleports": destinations, "teleportsError": teleports_error,
                 "journal": self.recent(ctx.realm.key)}
 
     def run(self, ctx, ra_port, body):
