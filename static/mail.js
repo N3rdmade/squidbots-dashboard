@@ -1,6 +1,6 @@
 /* Dedicated CoA Mail Center — separate from moderation. Never writes to SQL. */
 (() => {
-  let players = [], items = [], cart = [], recipient = "", query = "", timer = null, loading = false, nextPage = null, selected = null, requestSeq = 0;
+  let players = [], items = [], cart = [], recipient = "", query = "", timer = null, loading = false, nextPage = null, selected = null, requestSeq = 0, totalItems = null;
   const $ = id => document.getElementById(id);
   const html = s => esc(String(s ?? ""));
   function icon(item) {
@@ -24,7 +24,8 @@
     }).join('');
     $("mailPage").innerHTML = '<div class="mail-layout"><section class="card mail-catalog"><div class="mail-heading"><h2>Item Library</h2><span class="meta">Search your CoA item database</span></div>' +
       '<input id="mailSearch" type="search" placeholder="Search items (e.g. head, sword, potion)" value="' + html(query) + '" aria-label="Search items">' +
-      '<div id="mailCatalogStatus" class="meta">' + (loading ? 'Searching…' : items.length ? items.length + ' matching items' : 'Type at least two characters to search') + '</div>' +
+      '<div class="meta" id="mailDatabaseStatus">' + (totalItems === null ? 'Checking CoA item database…' : totalItems.toLocaleString() + ' items in the CoA world database') + '</div>' +
+      '<div id="mailCatalogStatus" class="meta">' + (loading ? 'Searching…' : items.length ? items.length + ' shown' + (nextPage ? ' · more available' : '') : 'Type at least two characters to search') + '</div>' +
       '<div class="mail-items">' + matches + '</div>' +
       (nextPage ? '<button class="btn" id="mailLoadMore" type="button">Load more matching CoA items</button>' : '') + '</section>' +
       '<section class="card mail-compose"><div class="mail-heading"><h2>Compose Mail</h2><span class="meta">Delivered using the worldserver GM console</span></div>' +
@@ -129,6 +130,11 @@
     if(e.target.closest('#mailSendItems'))send('items');
     if(e.target.closest('#mailSendGold'))send('money');
   });
-  window.showMailPage=()=>{if(!$("mailPage"))return;draw();loadPlayers();};
+  let counted=false;
+  async function countItems(){
+    try {const r=await getJson('/api/item-count');if(!r.error){totalItems=r.total;const el=$('mailDatabaseStatus');if(el)el.textContent=totalItems.toLocaleString()+' items in '+r.source;}}
+    catch(e){if($('mailDatabaseStatus'))$('mailDatabaseStatus').textContent='Item database count unavailable';}
+  }
+  window.showMailPage=()=>{if(!$("mailPage"))return;draw();loadPlayers();if(!counted){counted=true;countItems();}};
   if (location.hash.split("/")[0] === "#mail") window.showMailPage();
 })();
