@@ -54,6 +54,10 @@ def find_repack():
 ROOT = SETTINGS.get("repack") or find_repack()
 BUILDS = os.path.join(HERE, "coa-level-builds.json")
 PORT = int(os.environ.get("COA_DASHBOARD_PORT") or SETTINGS.get("port") or 8088)
+# Models are private per installation and should not be committed to GitHub.
+MODEL_DIR = os.path.realpath(os.path.expanduser(
+    SETTINGS.get("modelDir") or os.path.join(HERE, "static", "models")))
+
 
 # Bot settings the dashboard can edit. The .conf files are read by the server at
 # startup, so editing them while it is stopped is the simplest way to configure a
@@ -1105,7 +1109,7 @@ def context(key):
 MONITOR = monitor.Monitor(REALMS, ROOT, lambda key: live_count(context(key)),
                           every=int(SETTINGS.get("monitorEvery", 60)), coa_exe=SETTINGS.get("worldserverPath"),
                           use_ra=SETTINGS.get("console", True) is not False)
-GM = gm.Gm(ROOT, mysql, os.path.join(HERE, "data", "gm-actions.jsonl"))
+GM = gm.Gm(ROOT, mysql, os.path.join(HERE, "data", "gm-actions.jsonl"), SETTINGS)
 # The server's settings belong to the launcher, which builds every .conf file again at each start: the dashboard
 # only reads them, unless dashboard.json asks for its own Settings page (a server run without the launcher).
 CONFIG_EDIT = SETTINGS.get("settingsPage") is True
@@ -1548,7 +1552,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     # read the answers (DNS rebinding). So every request must name this server in Host, and a
     # write must also come from this page (Origin) with a JSON body, which no form can send.
     def _allowed_hosts(self):
-        return {"%s:%d" % (name, PORT) for name in ("127.0.0.1", "localhost", "[::1]")}
+        return {"%s:%d" % (name, port) for name in ("127.0.0.1", "localhost", "[::1]") for port in ({PORT} | {int(p) for p in SETTINGS.get("tunnelPorts", []) if str(p).isdigit() and 1 <= int(p) <= 65535})}
 
     def _own_host(self):
         if (self.headers.get("Host") or "").lower() in self._allowed_hosts():
@@ -1615,6 +1619,60 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             realm=ctx.realm.public(), crashes=server_state(ctx), cores=procinfo.cores()))
         elif path == "/api/market":
             self._json(ctx.market.get())
+        elif path == "/api/item-count":
+            if not GM_ENABLED:
+                self._json({"error": "GM tools are disabled"}, 403)
+                return
+            status, payload = answer_or_error(lambda: {
+                "total": int(mysql("SELECT COUNT(*) FROM `%s`.item_template" % ctx.db["world"])[0][0]),
+                "source": ctx.db["world"] + ".item_template"
+            })
+            self._json(payload, status)
+        elif path == "/api/items":
+            if not GM_ENABLED:
+                self._json({"error": "GM tools are disabled"}, 403)
+                return
+            term = (first("q") or "").strip()
+            if len(term) < 2 or len(term) > 60:
+                self._json({"error": "Search for at least two characters (maximum 60)."}, 400)
+                return
+            # Hex literals prevent user-supplied text from escaping into SQL.
+            safe = term.encode("utf-8").hex()
+            # Always query the live CoA world item_template: custom IDs included.
+            # Keyset pagination avoids silently hiding everything after the first 60.
+            after = first("after") or "0"
+            if not after.isdecimal() or len(after) > 10:
+                self._json({"error": "Invalid pagination cursor"}, 400)
+                return
+            cursor = min(int(after), 4294967295)
+            sql = ("SELECT entry, name, Quality, ItemLevel, stackable, displayid, InventoryType "
+                   "FROM `%s`.item_template "
+                   "WHERE entry > %d AND CONVERT(name USING utf8mb4) COLLATE utf8mb4_unicode_ci "
+                   "LIKE CONCAT('%%', CONVERT(X'%s' USING utf8mb4) COLLATE utf8mb4_unicode_ci, '%%') "
+                   "ORDER BY entry LIMIT 61" % (ctx.db["world"], cursor, safe))
+            def item_results():
+                rows = mysql(sql)
+                more = len(rows) > 60
+                rows = rows[:60]
+                armory = ctx.armory
+                icons = armory._icon_names(int(row[5]) for row in rows) if armory else {}
+                results = [{"id": int(row[0]), "name": row[1], "quality": int(row[2]),
+                            "level": int(row[3]), "stack": int(row[4]),
+                            "displayId": int(row[5]), "inventoryType": int(row[6]),
+                            "icon": icons.get(int(row[5]), "")} for row in rows]
+                return {"items": results, "next": int(rows[-1][0]) if more and rows else None,
+                        "source": ctx.db["world"] + ".item_template"}
+            status, payload = answer_or_error(item_results)
+            self._json(payload, status)
+        elif path == "/api/model-mode":
+            self._json({"mode": "local", "configured": os.path.isdir(MODEL_DIR)})
+        elif path == "/api/model-available":
+            display = first("display") or ""
+            if not display.isdecimal() or len(display) > 10:
+                self._json({"error": "Invalid display ID"}, 400)
+                return
+            file = os.path.join(MODEL_DIR, str(int(display)) + ".glb")
+            self._json({"available": os.path.isfile(file)})
         elif path == "/api/gm":
             if not GM_ENABLED:
                 self._json({"error": "The GM tools are turned off in dashboard.json (gmTools)."}, 403)
@@ -1683,6 +1741,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+        elif re.fullmatch(r"/static/models/[0-9]{1,10}\.glb", path):
+            file = os.path.join(MODEL_DIR, path.rsplit("/", 1)[-1])
+            if not os.path.isfile(file):
+                self.send_error(404)
+                return
+            with open(file, "rb") as handle:
+                self._send(handle.read(), "model/gltf-binary")
         elif path.startswith("/static/"):
             leaf = path[len("/static/"):]
             kind = STATIC_TYPES.get(os.path.splitext(leaf)[1])

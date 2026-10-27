@@ -85,6 +85,14 @@ def _command(action, body):
         if where not in UNSTUCK:
             raise GmError("Unstuck to the inn, the graveyard or the start zone.")
         return ".unstuck %s %s" % (target(), where)
+    if action == "teleport":
+        name = str(body.get("destination") or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_]{1,100}", name):
+            raise GmError("Select a valid saved teleport destination.")
+        # The command parser treats whitespace as an argument separator. Quote
+        # custom CoA character names (e.g. "Boom Shakalaka") as one argument.
+        character = _quoted(body.get("character"), 50, "character name")
+        return ".teleport name %s %s" % (character, name)
     if action == "mute":
         return ".mute %s %d %s" % (target(), _int(body.get("minutes"), 1, 10080, "duration in minutes"),
                                    _text(body.get("reason"), 100, "reason"))
@@ -97,11 +105,21 @@ def _command(action, body):
         return ".send money %s %s %s %d" % (target(), _quoted(body.get("subject") or "Gift", 60, "subject"),
                                             _quoted(body.get("text") or "From the game masters.", 200, "text"), copper)
     if action == "items":
-        item = _int(body.get("item"), 1, 9999999, "item number")
-        count = _int(body.get("count") or 1, 1, 200, "count")
-        return ".send items %s %s %s %d:%d" % (target(), _quoted(body.get("subject") or "Gift", 60, "subject"),
-                                               _quoted(body.get("text") or "From the game masters.", 200, "text"),
-                                               item, count)
+        entries = body.get("items")
+        if entries is None:
+            entries = [{"item": body.get("item"), "count": body.get("count") or 1}]
+        if not isinstance(entries, list) or not 1 <= len(entries) <= 12:
+            raise GmError("A mail can contain 1 to 12 attachments.")
+        attachments = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                raise GmError("Each attachment needs an item and quantity.")
+            item = _int(entry.get("item"), 1, 9999999, "item number")
+            count = _int(entry.get("count") or 1, 1, 200, "count")
+            attachments.append("%d:%d" % (item, count))
+        return ".send items %s %s %s %s" % (target(), _quoted(body.get("subject") or "Gift", 60, "subject"),
+                                              _quoted(body.get("text") or "From the game masters.", 200, "text"),
+                                              " ".join(attachments))
     if action == "ban":
         duration = str(body.get("duration") or "").strip().lower()
         if not DURATION.match(duration) or duration in ("0",):
@@ -120,12 +138,13 @@ def _command(action, body):
 
 
 ACTIONS = ("announce", "notify", "saveall", "kick", "revive", "unstuck", "mute", "unmute", "level", "money", "items",
-           "ban", "unban", "gmlevel", "ahbot")
+           "ban", "unban", "gmlevel", "ahbot", "teleport")
 
 
 class Gm:
-    def __init__(self, root, query, journal):
+    def __init__(self, root, query, journal, settings=None):
         self.root, self.query, self.journal = root, query, journal
+        self.settings = settings or {}
         self.lock = threading.Lock()
 
     def overview(self, ctx, ra_port, running):
@@ -145,14 +164,29 @@ class Gm:
                     "account": acc, "gm": int(g), "banned": b == "1", "lastSeen": int(seen or 0),
                     "muted": int(mute or 0) > now}
                    for guid, n, l, c, r, o, z, acc, g, b, seen, mute in rows]
-        return {"realm": ctx.realm.public(), "console": running, "raPort": ra_port, "players": players,
+        destinations = []
+        teleports_error = ""
+        try:
+            # Names in AzerothCore game_tele differ between distributions:
+            # e.g. StormwindCity, ThunderBluff, and DalaranNorthrend.
+            keywords = ("stormwind", "orgrimmar", "ironforge", "darnassus", "exodar",
+                        "thunder", "undercity", "silvermoon", "shattrath", "dalaran",
+                        "booty", "gadgetzan", "ratchet", "everlook")
+            where = " OR ".join("LOWER(name) LIKE '%" + word + "%'" for word in keywords)
+            found = self.query("SELECT name FROM {world}.game_tele WHERE {where} ORDER BY name LIMIT 120".format(
+                world=db["world"], where=where))
+            destinations = [str(row[0]) for row in found]
+        except Exception as error:
+            teleports_error = str(error)[:250]
+        return {"realm": ctx.realm.public(), "console": running, "raPort": ra_port, "players": players, "teleports": destinations, "teleportsError": teleports_error,
                 "journal": self.recent(ctx.realm.key)}
 
     def run(self, ctx, ra_port, body):
         action = str(body.get("action") or "")
         command = _command(action, body)
         try:
-            answer, ok = ra.command(self.root, ra_port, command, timeout=12), True
+            answer, ok = ra.command(self.root, ra_port, command, timeout=12,
+                username=self.settings.get("raUsername"), password=self.settings.get("raPassword")), True
         except ra.RaError as error:
             answer, ok = str(error), False
         # A refused command answers with the core's own message; the console has no exit code to read.

@@ -259,6 +259,41 @@ document.addEventListener("click", async event => {
 
 /* ------------------------------------------------------------- game master ---- */
 let GMDATA = null, GM_PICK = null, GM_FILTER = "";
+let GM_MAIL_CART = [], GM_ITEM_RESULTS = [], GM_ITEM_QUERY = "";
+function gmMailHtml() {
+  const cart = GM_MAIL_CART.map((item, i) =>
+    '<li><span>' + esc(item.name) + ' <span class="meta">#' + item.id + '</span></span> ' +
+    '<input type="number" min="1" max="200" value="' + item.count + '" data-mail-count="' + i + '" aria-label="Quantity">' +
+    '<button class="btn small" type="button" data-mail-remove="' + i + '">Remove</button></li>').join("");
+  const results = GM_ITEM_RESULTS.map(item =>
+    '<li><span class="q' + item.quality + '">' + esc(item.name) + '</span> ' +
+    '<span class="meta">#' + item.id + ' · item level ' + item.level + '</span>' +
+    '<button class="btn small" type="button" data-mail-add="' + item.id + '">Add</button></li>').join("");
+  return '<div class="mail-center"><h3>Mail Center</h3>' +
+    '<p class="meta">Deliver mail to the selected character, including offline players. Up to 12 item attachments per message.</p>' +
+    '<div class="gm-row"><input id="gmItemSearch" type="search" aria-label="Search CoA items" placeholder="Search CoA items by name" value="' + esc(GM_ITEM_QUERY) + '">' +
+    '<button class="btn small" type="button" data-mail-search>Search items</button></div>' +
+    '<ul class="mail-results" id="gmItemResults">' + results + '</ul>' +
+    '<h4>Attachments (' + GM_MAIL_CART.length + '/12)</h4>' +
+    '<ul class="mail-cart" id="gmMailCart">' + (cart || '<li class="meta">No attachments selected</li>') + '</ul>' +
+    '<div class="gm-row"><input id="gmMailSubject" maxlength="60" placeholder="Mail subject" value="A gift from the Game Masters" aria-label="Mail subject"></div>' +
+    '<div class="gm-row"><textarea id="gmMailText" maxlength="200" rows="3" placeholder="Message for the recipient" aria-label="Mail message"></textarea></div>' +
+    '<div class="gm-row"><button class="btn" type="button" data-mail-send>Send attached items</button>' +
+    '<label class="gm-label">Gold <input id="gmMailGold" type="number" min="1" max="100000" value="100" aria-label="Gold quantity"></label>' +
+    '<button class="btn" type="button" data-mail-gold>Send gold instead</button></div>' +
+    '<p class="meta">Items and gold are sent as separate in-game mails via the worldserver.</p>' +
+    '<p id="gmMailResult" class="gm-result" role="status"></p></div>';
+}
+async function gmMailRequest(body) {
+  const out = document.getElementById("gmMailResult");
+  if (!out) return;
+  out.textContent = "Sending…";
+  const result = await gmPost(body);
+  out.className = "gm-result " + (result.ok ? "ok" : "bad");
+  out.textContent = (result.ok ? "Sent" : "Failed") + " · " + (result.answer || result.error || "No server response");
+  if (result.ok && body.action === "items") GM_MAIL_CART = [];
+}
+
 
 async function loadGm() {
   GMDATA = await getJson("/api/gm").catch(error => ({ error: String(error) }));
@@ -327,12 +362,15 @@ function gmActionsHtml(p) {
     '<div class="gm-row"><button class="btn small" data-gm="kick">' + esc(words.gmKick) + '</button><button class="btn small" data-gm="revive">' + esc(words.gmRevive) + "</button></div>" +
     '<div class="gm-row"><span class="gm-what">' + esc(words.gmUnstuck) + '</span><button class="btn small" data-gm="unstuck" data-where="inn">' + esc(words.gmInn) +
       '</button><button class="btn small" data-gm="unstuck" data-where="graveyard">' + esc(words.gmGraveyard) + '</button><button class="btn small" data-gm="unstuck" data-where="startzone">' + esc(words.gmStart) + "</button></div>" +
+    '<div class="gm-row"><label for="gmDestination">Teleport to city</label><select id="gmDestination"><option value="">Select city</option>' +
+      (GMDATA.teleports || []).map(name => '<option value="' + esc(name) + '">' + esc(name) + '</option>').join("") +
+      '</select><button class="btn small" data-gm="teleport">Teleport player</button></div>' +
+    (!(GMDATA.teleports || []).length ? '<p class="meta">' + esc(GMDATA.teleportsError || 'No matching teleport locations were returned by the game database.') + '</p>' : '') +
     '<div class="gm-row">' + field("gmMinutes", words.gmMinutes, "number", ' min="1" max="10080" value="15"') + field("gmMuteReason", words.gmReason) +
       '<button class="btn small" data-gm="mute">' + esc(words.gmMute) + '</button><button class="btn small" data-gm="unmute">' + esc(words.gmUnmute) + "</button></div>" +
     '<div class="gm-row">' + field("gmLevelValue", words.gmLevel, "number", ' min="1" max="80" value="' + p.level + '"') + '<button class="btn small" data-gm="level">' + esc(words.gmSetLevel) + "</button></div>" +
     '<div class="gm-row">' + field("gmGoldValue", "or / gold", "number", ' min="1" max="100000" value="100"') + '<button class="btn small" data-gm="money">' + esc(words.gmGold) + "</button></div>" +
-    '<div class="gm-row">' + field("gmItemValue", words.gmItemId, "number", ' min="1"') + field("gmItemCount", words.gmCount, "number", ' min="1" max="200" value="1"') +
-      '<button class="btn small" data-gm="items">' + esc(words.gmItem) + "</button></div>" +
+    "" +
     '<div class="gm-row danger">' + field("gmBanDuration", words.gmDuration, "text", ' value="1d"') + field("gmBanReason", words.gmReason) +
       '<button class="btn small" data-gm="ban">' + esc(words.gmBan) + '</button><button class="btn small" data-gm="unban">' + esc(words.gmUnban) + "</button></div>" +
     '<div class="gm-row danger"><select id="gmLevelGm" aria-label="' + esc(words.gmGmLevel) + '">' + words.gmGmLevels.map((label, i) =>
@@ -341,8 +379,66 @@ function gmActionsHtml(p) {
     '<p class="gm-result" id="gmPickResult"></p>';
 }
 
-const GM_CONFIRM = ["kick", "ban", "gmlevel", "level", "money", "items", "mute"];
+const GM_CONFIRM = ["teleport", "kick", "ban", "gmlevel", "level", "money", "items", "mute"];
 document.addEventListener("click", async event => {
+  const mail = event.target.closest("[data-mail-search], [data-mail-add], [data-mail-remove], [data-mail-send], [data-mail-gold]");
+  if (mail) {
+    if (mail.hasAttribute("data-mail-search")) {
+      const search = document.getElementById("gmItemSearch");
+      GM_ITEM_QUERY = (search?.value || "").trim();
+      const results = document.getElementById("gmItemResults");
+      if (results) results.textContent = "Searching…";
+      try {
+        const response = await getJson("/api/items?q=" + encodeURIComponent(GM_ITEM_QUERY));
+        if (response.error) throw new Error(response.error);
+        GM_ITEM_RESULTS = response.items || [];
+        if (results) results.innerHTML = GM_ITEM_RESULTS.map(item =>
+          '<li><span class="q' + item.quality + '">' + esc(item.name) + '</span> ' +
+          '<span class="meta">#' + item.id + ' · level ' + item.level + '</span>' +
+          '<button class="btn small" data-mail-add="' + item.id + '">Add</button></li>').join("") ||
+          '<li class="meta">No matching items found</li>';
+      } catch (error) { if (results) results.textContent = String(error); }
+    } else if (mail.hasAttribute("data-mail-add")) {
+      const item = GM_ITEM_RESULTS.find(v => String(v.id) === mail.dataset.mailAdd);
+      if (!item) return;
+      const old = GM_MAIL_CART.find(v => v.id === item.id);
+      if (old) old.count = Math.min(200, old.count + 1);
+      else if (GM_MAIL_CART.length < 12) GM_MAIL_CART.push({id: item.id, name: item.name, count: 1});
+      const cart = document.getElementById("gmMailCart");
+      if (cart) cart.innerHTML = GM_MAIL_CART.map((v, i) =>
+        '<li>' + esc(v.name) + ' <span class="meta">#' + v.id + '</span> ' +
+        '<input type="number" min="1" max="200" value="' + v.count + '" data-mail-count="' + i + '" aria-label="Quantity">' +
+        '<button class="btn small" data-mail-remove="' + i + '">Remove</button></li>').join("");
+    } else if (mail.hasAttribute("data-mail-remove")) {
+      GM_MAIL_CART.splice(Number(mail.dataset.mailRemove), 1);
+      const cart = document.getElementById("gmMailCart");
+      if (cart) cart.innerHTML = GM_MAIL_CART.map((v, i) =>
+        '<li>' + esc(v.name) + ' <span class="meta">#' + v.id + '</span> ' +
+        '<input type="number" min="1" max="200" value="' + v.count + '" data-mail-count="' + i + '" aria-label="Quantity">' +
+        '<button class="btn small" data-mail-remove="' + i + '">Remove</button></li>').join("");
+    } else {
+      const pick = (GMDATA?.players || []).find(p => p.name === GM_PICK);
+      const output = document.getElementById("gmMailResult");
+      if (!pick) { if (output) output.textContent = "Select a player first."; return; }
+      const subject = document.getElementById("gmMailSubject")?.value || "Gift";
+      const text = document.getElementById("gmMailText")?.value || "From the Game Masters.";
+      let body = {guid: pick.guid, subject, text};
+      if (mail.hasAttribute("data-mail-send")) {
+        if (!GM_MAIL_CART.length) { if (output) output.textContent = "Add an item first."; return; }
+        body.action = "items";
+        body.items = GM_MAIL_CART.map((v, i) => ({
+          item: v.id,
+          count: Number(document.querySelector('[data-mail-count="' + i + '"]')?.value || v.count)
+        }));
+      } else {
+        body.action = "money";
+        body.gold = document.getElementById("gmMailGold")?.value;
+      }
+      if (!window.confirm("Send " + (body.action === "items" ? body.items.length + " item attachment(s)" : body.gold + " gold") + " to " + pick.name + "?")) return;
+      await gmMailRequest(body);
+    }
+    return;
+  }
   const row = event.target.closest("[data-gm-pick]");
   if (row) { GM_PICK = row.dataset.gmPick; renderGm(); return; }
   const button = event.target.closest("[data-gm]");
@@ -353,6 +449,7 @@ document.addEventListener("click", async event => {
   const body = { action: action, guid: pick.guid, account: pick.account };
   if (action === "announce" || action === "notify") body.text = value("gmText");
   if (action === "unstuck") body.where = button.dataset.where;
+  if (action === "teleport") { body.destination = value("gmDestination"); body.character = pick.name; if (!body.destination) { window.alert("Choose a city first."); return; } }
   if (action === "mute") { body.minutes = value("gmMinutes"); body.reason = value("gmMuteReason"); }
   if (action === "level") body.level = value("gmLevelValue");
   if (action === "money") body.gold = value("gmGoldValue");
@@ -380,6 +477,7 @@ function showServerPage(page) {
   if (page === "server") { loadPerf(); perfTimer = setInterval(() => { if (!document.hidden) loadPerf(); }, 30000); }
   if (page === "market") loadMarket();
   if (page === "gm") loadGm();
+  if (page === "mail" && typeof showMailPage === "function") showMailPage();
 }
 
 document.getElementById("langButton").addEventListener("click", () => {

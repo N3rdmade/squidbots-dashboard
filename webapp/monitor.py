@@ -99,13 +99,14 @@ class Monitor:
     realm's live snapshot, or None. `every` seconds between rounds; 0 turns sampling off (state is then read
     on demand, without history)."""
 
-    def __init__(self, realms, root, bots_online, every=60, coa_exe=None, use_ra=True):
+    def __init__(self, realms, root, bots_online, every=60, coa_exe=None, use_ra=True, ra_settings=None):
         self.realms = realms
         self.root = root
         self.bots_online = bots_online
         self.every = every
         self.coa_exe = (coa_exe or "").lower()
         self.use_ra = use_ra
+        self.ra_settings = ra_settings or {}
         self.lock = threading.Lock()
         self.cpu = procinfo.CpuMeter()
         self.tracks = {r.key: Track(r.file("perf.json")) for r in realms}
@@ -116,11 +117,12 @@ class Monitor:
         """The realm's worldserver pid: the one the launcher or manage.py recorded, when it is still a worldserver;
         for the CoA realm without a record, the worldserver of this repack that no other realm claims."""
         pid = realm.pid()
-        if pid and procinfo.path_of(pid).lower().endswith("worldserver.exe"):
+        if pid and os.path.basename(procinfo.path_of(pid)).lower() in ("worldserver.exe", "worldserver"):
             return pid
         if realm.key != "coa":
             return 0
-        running = procinfo.find("worldserver.exe")
+        running = dict(procinfo.find("worldserver.exe"))
+        running.update(procinfo.find("worldserver"))
         if self.coa_exe:
             for candidate, path in running.items():
                 if path.lower() == self.coa_exe:
@@ -138,7 +140,7 @@ class Monitor:
         if realm.ra_port or realm.key != "coa":
             return realm.ra_port
         if self._coa_ra is None:
-            self._coa_ra = ra.account(self.root)[2]
+            self._coa_ra = int(self.ra_settings.get("raPort") or ra.account(self.root)[2])
         return self._coa_ra
 
     def look(self, realm, others=(), with_ra=True):
@@ -154,7 +156,9 @@ class Monitor:
                 state["ramMo"], state["cpu"] = sample["ramMo"], sample["cpu"]
         if running and with_ra and self.use_ra:
             try:
-                state.update(ra.parse_info(ra.command(self.root, self._ra_port(realm), "server info", timeout=6)))
+                state.update(ra.parse_info(ra.command(self.root, self._ra_port(realm), "server info", timeout=6,
+                    username=self.ra_settings.get("raUsername") if realm.key == "coa" else None,
+                    password=self.ra_settings.get("raPassword") if realm.key == "coa" else None)))
                 state["ra"] = True
             except ra.RaError as error:
                 state["ra"], state["raError"] = False, str(error)

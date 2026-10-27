@@ -35,11 +35,13 @@ def clean(text):
     return re.sub(r"[\x00-\x1f\x7f]+", " ", str(text or "")).strip()
 
 
-def command(root, port, line, timeout=10.0):
+def command(root, port, line, timeout=10.0, username=None, password=None):
     """Run `line` on the console at `port`; its answer as text. RaError when the world does not answer."""
     if not port:
         raise RaError("This realm's console port is unknown: start it once from the launcher.")
-    user, password, _ = account(root)
+    default_user, default_password, _ = account(root)
+    user = username if username is not None else default_user
+    password = password if password is not None else default_password
     line = clean(line)
     try:
         sock = socket.create_connection(("127.0.0.1", int(port)), timeout=2.0)
@@ -73,7 +75,7 @@ def command(root, port, line, timeout=10.0):
                     state["step"], state["data"] = 3, ""
                     sock.sendall((line + "\r\n").encode("utf-8"))
                 elif state["step"] == 2 and re.search(r"failed|denied|wrong", data, re.I):
-                    state["error"] = "The world console refused the repack account (Settings\\repack.json)."
+                    state["error"] = "The world console rejected the RA username/password. Set raUsername and raPassword in dashboard.json to a valid GM account."
                     break
                 elif state["step"] == 3 and PROMPT.search(data):
                     state["answer"] = PROMPT.sub("", data).strip()
