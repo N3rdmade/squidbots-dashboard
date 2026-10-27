@@ -2,7 +2,7 @@
 let modulePromise;
 async function mpqLibrary() {
   // Browser entry point is documented by stormlib-js; dependency loaded only on demand.
-  if (!modulePromise) modulePromise=import('https://esm.sh/stormlib-js@0.1.0/browser?bundle')
+  if (!modulePromise) modulePromise=import('https://esm.sh/stormlib-js@0.1.1/browser?bundle')
     .catch(e=>{modulePromise=null;throw e;});
   return modulePromise;
 }
