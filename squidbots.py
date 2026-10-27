@@ -1667,8 +1667,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/character-viewer-config":
             folder = os.path.realpath(os.path.expanduser(
                 SETTINGS.get("wotlkViewerDir") or os.path.join(os.path.expanduser("~"), "coa-server", "assets", "wotlk-model-data")))
-            ready = os.path.isdir(folder) and any(os.scandir(folder))
-            self._json({"ready": ready, "configured": bool(SETTINGS.get("wotlkViewerDir"))})
+            expected = os.path.join(folder, "meta", "charactercustomization2", "1_1.json")
+            ready = os.path.isfile(expected)
+            self._json({"ready": ready, "configured": bool(SETTINGS.get("wotlkViewerDir")),
+                        "missing": "" if ready else "meta/charactercustomization2/1_1.json",
+                        "folderExists": os.path.isdir(folder)})
         elif re.fullmatch(r"/wotlk-model-data/[A-Za-z0-9_./-]{1,220}", path):
             folder = os.path.realpath(os.path.expanduser(
                 SETTINGS.get("wotlkViewerDir") or os.path.join(HERE, "wotlk-model-data")))
