@@ -180,7 +180,12 @@
         });
       }
       // The matching classic 3.3.5 renderer and data must be served by SquidBots.
-      const config=await (await fetch('/api/character-viewer-config')).json();
+      const response=await fetch('/api/character-viewer-config',{cache:'no-store'});
+      const raw=await response.text();
+      let config;
+      try{config=JSON.parse(raw);}
+      catch(e){throw Error('Dashboard backend returned HTML instead of viewer configuration (HTTP '+response.status+'). Restart the test dashboard after pulling the updated Python server.');}
+      if(!response.ok)throw Error(config.error||'Viewer configuration API returned HTTP '+response.status);
       if(!config.ready)throw Error('WotLK model assets are not installed on the server. See WOTLK_VIEWER_SETUP.md.');
       window.CONTENT_PATH='/wotlk-model-data/';
       window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;
