@@ -54,6 +54,10 @@ def find_repack():
 ROOT = SETTINGS.get("repack") or find_repack()
 BUILDS = os.path.join(HERE, "coa-level-builds.json")
 PORT = int(os.environ.get("COA_DASHBOARD_PORT") or SETTINGS.get("port") or 8088)
+# Models are private per installation and should not be committed to GitHub.
+MODEL_DIR = os.path.realpath(os.path.expanduser(
+    SETTINGS.get("modelDir") or os.path.join(HERE, "static", "models")))
+
 
 # Bot settings the dashboard can edit. The .conf files are read by the server at
 # startup, so editing them while it is stopped is the simplest way to configure a
@@ -1660,12 +1664,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         "source": ctx.db["world"] + ".item_template"}
             status, payload = answer_or_error(item_results)
             self._json(payload, status)
+        elif path == "/api/model-mode":
+            self._json({"mode": "local", "configured": os.path.isdir(MODEL_DIR)})
         elif path == "/api/model-available":
             display = first("display") or ""
             if not display.isdecimal() or len(display) > 10:
                 self._json({"error": "Invalid display ID"}, 400)
                 return
-            file = os.path.join(HERE, "static", "models", display + ".glb")
+            file = os.path.join(MODEL_DIR, str(int(display)) + ".glb")
             self._json({"available": os.path.isfile(file)})
         elif path == "/api/gm":
             if not GM_ENABLED:
@@ -1736,7 +1742,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         elif re.fullmatch(r"/static/models/[0-9]{1,10}\\.glb", path):
-            file = os.path.join(HERE, "static", "models", path.rsplit("/", 1)[-1])
+            file = os.path.join(MODEL_DIR, path.rsplit("/", 1)[-1])
             if not os.path.isfile(file):
                 self.send_error(404)
                 return
