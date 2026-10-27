@@ -1615,6 +1615,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             realm=ctx.realm.public(), crashes=server_state(ctx), cores=procinfo.cores()))
         elif path == "/api/market":
             self._json(ctx.market.get())
+        elif path == "/api/items":
+            if not GM_ENABLED:
+                self._json({"error": "GM tools are disabled"}, 403)
+                return
+            term = (first("q") or "").strip()
+            if len(term) < 2 or len(term) > 60:
+                self._json({"error": "Search for at least two characters (maximum 60)."}, 400)
+                return
+            # Hex literals prevent user-supplied text from escaping into SQL.
+            safe = term.encode("utf-8").hex()
+            sql = ("SELECT entry, name, Quality, ItemLevel, stackable "
+                   "FROM `%s`.item_template WHERE name LIKE CONCAT('%%', CONVERT(X'%s' USING utf8mb4), '%%') "
+                   "ORDER BY name LIMIT 60" % (ctx.db["world"], safe))
+            status, payload = answer_or_error(lambda: [
+                {"id": int(row[0]), "name": row[1], "quality": int(row[2]),
+                 "level": int(row[3]), "stack": int(row[4])}
+                for row in mysql(sql)])
+            self._json({"items": payload} if status == 200 else payload, status)
         elif path == "/api/gm":
             if not GM_ENABLED:
                 self._json({"error": "The GM tools are turned off in dashboard.json (gmTools)."}, 403)
