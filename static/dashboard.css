@@ -928,3 +928,14 @@ tbody tr:hover td { background: var(--tint); }
 .mail-gold input { max-width:105px; }
 @media(max-width:900px){.mail-layout{grid-template-columns:1fr}.mail-items{max-height:380px}}
 @media(max-width:480px){.mail-slots{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+/* Three-panel mail layout: catalog, composer, optional real 3D model workspace */
+.mail-layout { grid-template-columns:minmax(300px,1.04fr) minmax(300px,1fr) minmax(300px,.95fr); align-items:start; }
+.mail-preview { min-height:600px; }
+.mail-preview .preview-summary { display:flex; gap:14px; align-items:center; margin-bottom:14px; }
+.mail-preview .preview-summary strong { font-size:16px; }
+.mail-model-frame { min-height:410px; display:flex; align-items:center; justify-content:center; border:1px solid rgba(126,193,205,.18); border-radius:12px; background:radial-gradient(ellipse at center,rgba(28,88,104,.25),rgba(3,14,23,.8)); overflow:hidden; margin-bottom:14px; }
+.mail-model-empty { max-width:260px; text-align:center; color:#9fb7c3; font-size:14px; line-height:1.65; }
+#mailLoadMore { width:100%; margin-top:12px; }
+@media(max-width:1400px){.mail-layout{grid-template-columns:repeat(2,minmax(290px,1fr))}.mail-preview{grid-column:1/-1;min-height:unset}.mail-model-frame{min-height:270px}}
+@media(max-width:850px){.mail-layout{grid-template-columns:1fr}.mail-preview{grid-column:auto}}
