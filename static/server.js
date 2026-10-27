@@ -365,6 +365,7 @@ function gmActionsHtml(p) {
     '<div class="gm-row"><label for="gmDestination">Teleport to city</label><select id="gmDestination"><option value="">Select city</option>' +
       (GMDATA.teleports || []).map(name => '<option value="' + esc(name) + '">' + esc(name) + '</option>').join("") +
       '</select><button class="btn small" data-gm="teleport">Teleport player</button></div>' +
+    (!(GMDATA.teleports || []).length ? '<p class="meta">' + esc(GMDATA.teleportsError || 'No matching teleport locations were returned by the game database.') + '</p>' : '') +
     '<div class="gm-row">' + field("gmMinutes", words.gmMinutes, "number", ' min="1" max="10080" value="15"') + field("gmMuteReason", words.gmReason) +
       '<button class="btn small" data-gm="mute">' + esc(words.gmMute) + '</button><button class="btn small" data-gm="unmute">' + esc(words.gmUnmute) + "</button></div>" +
     '<div class="gm-row">' + field("gmLevelValue", words.gmLevel, "number", ' min="1" max="80" value="' + p.level + '"') + '<button class="btn small" data-gm="level">' + esc(words.gmSetLevel) + "</button></div>" +
