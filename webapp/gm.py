@@ -85,6 +85,11 @@ def _command(action, body):
         if where not in UNSTUCK:
             raise GmError("Unstuck to the inn, the graveyard or the start zone.")
         return ".unstuck %s %s" % (target(), where)
+    if action == "teleport":
+        name = str(body.get("destination") or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_]{1,100}", name):
+            raise GmError("Select a valid saved teleport destination.")
+        return ".teleport name %s %s" % (_text(body.get("character"), 50, "character name"), name)
     if action == "mute":
         return ".mute %s %d %s" % (target(), _int(body.get("minutes"), 1, 10080, "duration in minutes"),
                                    _text(body.get("reason"), 100, "reason"))
@@ -130,7 +135,7 @@ def _command(action, body):
 
 
 ACTIONS = ("announce", "notify", "saveall", "kick", "revive", "unstuck", "mute", "unmute", "level", "money", "items",
-           "ban", "unban", "gmlevel", "ahbot")
+           "ban", "unban", "gmlevel", "ahbot", "teleport")
 
 
 class Gm:
@@ -155,7 +160,17 @@ class Gm:
                     "account": acc, "gm": int(g), "banned": b == "1", "lastSeen": int(seen or 0),
                     "muted": int(mute or 0) > now}
                    for guid, n, l, c, r, o, z, acc, g, b, seen, mute in rows]
-        return {"realm": ctx.realm.public(), "console": running, "raPort": ra_port, "players": players,
+        destinations = []
+        try:
+            city_names = ("Stormwind", "Orgrimmar", "Ironforge", "Darnassus", "Exodar",
+                          "ThunderBluff", "Undercity", "Silvermoon", "Shattrath", "Dalaran",
+                          "BootyBay", "Gadgetzan", "Ratchet", "Everlook")
+            names = ",".join("\'%s\'" % n for n in city_names)
+            found = self.query("SELECT name FROM {world}.game_tele WHERE name IN ({names}) ORDER BY name".format(world=db["world"], names=names))
+            destinations = [str(row[0]) for row in found]
+        except Exception:
+            pass
+        return {"realm": ctx.realm.public(), "console": running, "raPort": ra_port, "players": players, "teleports": destinations,
                 "journal": self.recent(ctx.realm.key)}
 
     def run(self, ctx, ra_port, body):
