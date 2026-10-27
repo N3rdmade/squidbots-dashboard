@@ -1660,6 +1660,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         "source": ctx.db["world"] + ".item_template"}
             status, payload = answer_or_error(item_results)
             self._json(payload, status)
+        elif path == "/api/model-available":
+            display = first("display") or ""
+            if not display.isdecimal() or len(display) > 10:
+                self._json({"error": "Invalid display ID"}, 400)
+                return
+            file = os.path.join(HERE, "static", "models", display + ".glb")
+            self._json({"available": os.path.isfile(file)})
         elif path == "/api/gm":
             if not GM_ENABLED:
                 self._json({"error": "The GM tools are turned off in dashboard.json (gmTools)."}, 403)
@@ -1728,6 +1735,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+        elif re.fullmatch(r"/static/models/[0-9]{1,10}\\.glb", path):
+            file = os.path.join(HERE, "static", "models", path.rsplit("/", 1)[-1])
+            if not os.path.isfile(file):
+                self.send_error(404)
+                return
+            with open(file, "rb") as handle:
+                self._send(handle.read(), "model/gltf-binary")
         elif path.startswith("/static/"):
             leaf = path[len("/static/"):]
             kind = STATIC_TYPES.get(os.path.splitext(leaf)[1])
