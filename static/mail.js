@@ -95,6 +95,19 @@
         characterAppearance.items.push([slot,Number(item.displayId)]);
       }
       frame.innerHTML='<div id="coaCharacterCanvas" style="height:420px;width:100%;"></div>';
+      viewerStage='Checking WotLK character customization data';
+      const metaPath='/wotlk-model-data/meta/charactercustomization2/' +
+        characterAppearance.race + '_' + characterAppearance.gender + '.json';
+      const metaResponse=await fetch(metaPath,{cache:'no-store'});
+      const metaContentType=metaResponse.headers.get('content-type')||'';
+      if(!metaResponse.ok || !metaContentType.toLowerCase().includes('application/json')){
+        throw Error('Expected JSON at '+metaPath+', but received HTTP '+metaResponse.status +
+          ' ('+(metaContentType||'unknown type')+'). Check the WotLK asset directory.');
+      }
+      const metaText=await metaResponse.text();
+      try {JSON.parse(metaText);}
+      catch(e){throw Error('Invalid model-data JSON at '+metaPath+': '+e.message);}
+      if(seq!==characterSeq || frame!==$('mailModelFrame'))return;
       viewerStage='Loading character assets from the WotLK data package';
       const model=await lib.generateModels(1,'#coaCharacterCanvas',{...characterAppearance,hideProgressBar:true});
       if(seq!==characterSeq || frame!==$('mailModelFrame')){try{model?.destroy();}catch(e){}return;}
