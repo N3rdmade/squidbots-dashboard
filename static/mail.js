@@ -52,6 +52,16 @@
   function loadZamLibrary(){
     if(!zamLibraryPromise){
       zamLibraryPromise=(async()=>{
+        // ZamModelViewer needs jQuery to exist before viewer.min.js executes.
+        if(!window.jQuery){
+          await new Promise((resolve,reject)=>{
+            const jq=document.createElement('script');
+            jq.src='https://code.jquery.com/jquery-3.5.1.min.js';
+            jq.onload=resolve;
+            jq.onerror=()=>reject(Error('jQuery dependency could not load'));
+            document.head.appendChild(jq);
+          });
+        }
         window.CONTENT_PATH='https://wow.zamimg.com/modelviewer/live/';
         window.WOTLK_TO_RETAIL_DISPLAY_ID_API=undefined;
         if(!document.querySelector('script[data-zam-viewer]')){
@@ -59,10 +69,11 @@
             const el=document.createElement('script');
             el.src='https://wow.zamimg.com/modelviewer/live/viewer/viewer.min.js';
             el.dataset.zamViewer='1';
-            el.onload=resolve;el.onerror=()=>reject(Error('ZAM renderer could not load'));
+            el.onload=()=>window.ZamModelViewer?resolve():reject(Error('ZAM viewer script loaded without ZamModelViewer'));el.onerror=()=>reject(Error('ZAM renderer could not load'));
             document.head.appendChild(el);
           });
         }
+        if(!window.ZamModelViewer)throw Error('ZamModelViewer is not defined after loading its script');
         return import('https://esm.sh/wow-model-viewer@1.5.1?bundle');
       })().catch(error=>{zamLibraryPromise=null;throw error;});
     }
