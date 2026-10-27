@@ -44,7 +44,10 @@ def _open(pid):
 def pids():
     """Every process id of this machine."""
     if not _OK:
-        return []
+        try:
+            return [int(n) for n in os.listdir("/proc") if n.isdigit()]
+        except OSError:
+            return []
     size = 4096
     while True:
         array = (wintypes.DWORD * size)()
@@ -58,6 +61,11 @@ def pids():
 
 
 def path_of(pid):
+    if not _OK:
+        try:
+            return os.readlink("/proc/%d/exe" % int(pid))
+        except (OSError, ValueError):
+            return ""
     handle = _open(pid)
     if not handle:
         return ""
@@ -94,6 +102,20 @@ class CpuMeter:
 
     def sample(self, pid):
         """{"ramMo", "cpu"} of `pid`, or None if it is not running. cpu is None on the first reading."""
+        if not _OK:
+            try:
+                stat = open("/proc/%d/stat" % pid).read()
+                parts = stat[stat.rfind(")") + 2:].split()
+                busy = (int(parts[11]) + int(parts[12])) / os.sysconf("SC_CLK_TCK")
+                pages = int(open("/proc/%d/statm" % pid).read().split()[1])
+                ram = int(pages * os.sysconf("SC_PAGE_SIZE") // (1024 * 1024))
+            except (OSError, IndexError, ValueError):
+                return None
+            now = time.time()
+            before = self.last.get(pid)
+            cpu = round(max(0.0, (busy - before[1]) / (now - before[0]) * 100), 1) if before and now > before[0] else None
+            self.last[pid] = (now, busy)
+            return {"ramMo": ram, "cpu": cpu}
         handle = _open(pid)
         if not handle:
             return None
