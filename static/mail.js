@@ -2,6 +2,29 @@
 (() => {
   let players = [], items = [], cart = [], recipient = "", query = "", timer = null, loading = false, nextPage = null, selected = null, requestSeq = 0, totalItems = null;
   const $ = id => document.getElementById(id);
+  let clientFolder = null, clientFolderName = '', clientArchiveCount = null;
+  async function chooseClientFolder() {
+    const status = $('mailClientStatus');
+    if (!window.showDirectoryPicker) {
+      if(status) status.textContent = 'Use Chrome or Edge on localhost to select a local client folder.';
+      return;
+    }
+    try {
+      const folder = await window.showDirectoryPicker({mode:'read', id:'coa-client'});
+      const data = await folder.getDirectoryHandle('Data');
+      let count = 0;
+      for await (const [name, handle] of data.entries()) {
+        if (handle.kind === 'file' && /\\.mpq$/i.test(name)) count++;
+      }
+      if (!count) throw Error('No MPQ archives found in Data. Select the root of your CoA client.');
+      clientFolder = folder;
+      clientFolderName = folder.name;
+      clientArchiveCount = count;
+      redraw();
+    } catch (error) {
+      if (error.name !== 'AbortError' && status) status.textContent = error.message;
+    }
+  }
   const html = s => esc(String(s ?? ""));
   function icon(item) {
     if (!item.icon || !/^[a-z0-9_]+$/i.test(item.icon)) return '<span class="mail-icon mail-icon-empty">?</span>';
@@ -42,6 +65,12 @@
       '<p class="meta">Item attachments and gold are sent in separate messages. A server RA connection is required.</p>' +
       '<p class="gm-result" role="status" id="mailFeedback"></p></section>' +
       '<section class="card mail-preview"><div class="mail-heading"><h2>Item Preview</h2><span class="meta">3D model workspace</span></div>' +
+      '<div class="mail-client-source"><button class="btn small" id="mailChooseCoA" type="button">' +
+      (clientFolder ? 'Change CoA folder' : 'Select local CoA folder') + '</button>' +
+      '<p class="meta" id="mailClientStatus">' +
+      (clientFolder ? html(clientFolderName) + ' · ' + clientArchiveCount + ' MPQ archives detected (browser only)' :
+        'Optional: select the game folder on this computer. No game files are uploaded.') +
+      '</p></div>' +
       preview + '<div class="mail-model-frame" id="mailModelFrame"><div class="mail-model-empty">' +
       (selected ? 'Loading 3D preview…' : 'Choose an item to preview') + '</div></div>' +
       '<p class="meta">3D previews load from your configured local model directory. Models must be exported to GLB once; no cloud model service is required.</p>' +
@@ -161,6 +190,7 @@
     if(e.target.id==='mailRecipient') recipient=e.target.value;
   });
   document.addEventListener('click',e=>{
+    if(e.target.closest('#mailChooseCoA')) { chooseClientFolder(); return; }
     if(e.target.closest('#mailLoadMore')) { loadMore(); return; }
     const view=e.target.closest('[data-catalog]');
     if(view){
